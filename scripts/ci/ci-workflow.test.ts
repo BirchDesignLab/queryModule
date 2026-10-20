@@ -47,6 +47,7 @@ describe("ci.yml structure (ADR-0008)", () => {
       "changes",
       "checks",
       "ci",
+      "e2e",
       "image",
       "mobile",
       "publish",
@@ -190,9 +191,13 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
     expect(aggregate({})).toBe(1);
   });
 
-  it("caps timeouts: changes and ci at most 5 minutes, image at most 35, every other job at most 20", () => {
+  it("a failed e2e shard fails the aggregate: a matrix job's result is failure when any leg fails (#748)", () => {
+    expect(aggregate({ ...all("success"), e2e: { result: "failure" } })).toBe(1);
+  });
+
+  it("caps timeouts: changes and ci at most 5 minutes, image and each e2e shard at most 35, every other job at most 20", () => {
     for (const id of jobIds) {
-      const cap = id === "changes" || id === "ci" ? 5 : id === "image" ? 35 : 20;
+      const cap = id === "changes" || id === "ci" ? 5 : id === "image" || id === "e2e" ? 35 : 20;
       expect(jobs[id]["timeout-minutes"], id).toBeLessThanOrEqual(cap);
     }
   });
@@ -232,22 +237,23 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
   });
 
-  it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
-    const steps = jobs.image.steps as WorkflowStep[];
+  it("each `e2e` shard's boot-smoke down step always runs, even if an earlier step failed", () => {
+    const steps = jobs.e2e.steps as WorkflowStep[];
     const down = steps.find(
       (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh down"),
     );
-    expect(down, "no boot-smoke.sh down step in the image job").toBeDefined();
+    expect(down, "no boot-smoke.sh down step in the e2e job").toBeDefined();
     expect(down?.if).toBe("always()");
   });
 
-  it("`image` job builds and boots the same tag it smoke-tests (querymodule:ci)", () => {
-    const steps = jobs.image.steps as WorkflowStep[];
-    const build = steps.find(
+  it("`image` builds the tag each `e2e` shard loads and boots (querymodule:ci)", () => {
+    const build = (jobs.image.steps as WorkflowStep[]).find(
       (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
     );
     expect(build?.run).toContain("--tag querymodule:ci");
-    const up = steps.find((s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"));
+    const up = (jobs.e2e.steps as WorkflowStep[]).find(
+      (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"),
+    );
     expect(up?.run).toContain("querymodule:ci");
   });
 
@@ -287,8 +293,9 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(lines).toContain("board_only=false");
   });
 
-  it("the aggregate `ci` job needs `image`", () => {
+  it("the aggregate `ci` job needs `image` and `e2e`", () => {
     expect(jobNeeds(jobs.ci)).toContain("image");
+    expect(jobNeeds(jobs.ci)).toContain("e2e");
   });
 
   it("`publish` needs `ci`, runs only on a push to main, and never on a pull_request", () => {
@@ -339,8 +346,8 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(envValues.some((v) => typeof v === "string" && v.endsWith(":latest"))).toBe(true);
   });
 
-  it("every checkout step in `image` and `publish` sets persist-credentials: false", () => {
-    for (const id of ["image", "publish"]) {
+  it("every checkout step in `image`, `e2e` and `publish` sets persist-credentials: false", () => {
+    for (const id of ["image", "e2e", "publish"]) {
       const steps = jobs[id].steps as WorkflowStep[];
       const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
       expect(checkout?.with?.["persist-credentials"], `${id} checkout`).toBe(false);
@@ -363,9 +370,8 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(runtimeIndex).toBeLessThan(buildIndex);
   });
 
-  it("`image` job saves and uploads the tested image only on a push to main (fixes C2)", () => {
+  it("`image` job saves and uploads the image on every run: the e2e shards and publish load those bytes (fixes C2, #748)", () => {
     const steps = jobs.image.steps as WorkflowStep[];
-    const pushGate = "github.event_name == 'push' && github.ref == 'refs/heads/main'";
     const save = steps.find(
       (s) =>
         typeof s.run === "string" &&
@@ -373,11 +379,52 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
         s.run.includes("querymodule:ci"),
     );
     expect(save, "no docker save step in the image job").toBeDefined();
-    expect(save?.if).toBe(pushGate);
+    expect(save?.if).toBeUndefined();
     const upload = steps.find((s) => s.uses?.startsWith("actions/upload-artifact"));
     expect(upload, "no actions/upload-artifact step in the image job").toBeDefined();
-    expect(upload?.if).toBe(pushGate);
+    expect(upload?.if).toBeUndefined();
     expect(upload?.with?.name).toBe("querymodule-image");
+    expect(upload?.with?.["retention-days"]).toBe(1);
+  });
+});
+
+describe("ci.yml e2e shards (#748)", () => {
+  const steps = () => jobs.e2e.steps as WorkflowStep[];
+
+  it("`e2e` waits for `image` and skips with it on a docs-only or board-only change", () => {
+    expect(jobNeeds(jobs.e2e)).toEqual(["changes", "image"]);
+    expect(jobs.e2e.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
+  });
+
+  it("runs three shards, none cancelled by another's failure, each with its own 35-minute timeout", () => {
+    expect(jobs.e2e.strategy?.matrix?.shard).toEqual([1, 2, 3]);
+    expect(jobs.e2e.strategy?.["fail-fast"]).toBe(false);
+    expect(jobs.e2e["timeout-minutes"]).toBe(35);
+  });
+
+  it("each shard boots the one image `image` uploaded and never builds its own", () => {
+    const download = steps().find((s) => s.uses?.startsWith("actions/download-artifact"));
+    expect(download?.with?.name).toBe("querymodule-image");
+    const loadAt = steps().findIndex(
+      (s) => typeof s.run === "string" && s.run.includes("docker load"),
+    );
+    const upAt = steps().findIndex(
+      (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"),
+    );
+    expect(loadAt).toBeGreaterThan(-1);
+    expect(upAt).toBeGreaterThan(loadAt);
+    const builds = steps().filter(
+      (s) =>
+        (typeof s.run === "string" && /docker (buildx )?build|--build/.test(s.run)) ||
+        s.uses?.startsWith("docker/"),
+    );
+    expect(builds).toEqual([]);
+  });
+
+  it("the shard index reaches Playwright through env, never interpolated into the run body", () => {
+    const step = steps().find((s) => typeof s.name === "string" && s.name.startsWith("12:"));
+    expect(step?.env?.SHARD).toBe(["$", "{{ matrix.shard }}"].join(""));
+    expect(String(step?.run)).not.toContain("${{");
   });
 });
 
@@ -413,13 +460,13 @@ function step12Violations(run: string): string[] {
 
 describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke container (#167)", () => {
   const step = () =>
-    (jobs.image.steps as WorkflowStep[]).find(
+    (jobs.e2e.steps as WorkflowStep[]).find(
       (s) => typeof s.name === "string" && s.name.startsWith("12:"),
     );
 
-  it("runs the whole e2e suite, not one spec, at the container's PUBLIC_ORIGIN via QM_BASE_URL", () => {
+  it("runs the whole e2e suite, not one spec, split into this leg's shard, at the container's PUBLIC_ORIGIN via QM_BASE_URL", () => {
     const run = String(step()?.run ?? "");
-    expect(run).toMatch(/playwright test\s*$/m);
+    expect(run).toMatch(/playwright test --shard="\$SHARD\/3"\s*$/m);
     const smoke = readFileSync(resolve(root, "scripts/ci/boot-smoke.sh"), "utf8");
     const origin = smoke.match(/-e PUBLIC_ORIGIN=(\S+)/)?.[1];
     expect(origin).toBe("http://localhost:3000");
@@ -517,7 +564,7 @@ describe("ci.yml board-only fast path (#617)", () => {
     expect(jobs.changes.outputs.board_only).toBe(
       ["$", "{{ steps.changes.outputs.board_only }}"].join(""),
     );
-    for (const id of ["checks", "test", "image"]) {
+    for (const id of ["checks", "test", "image", "e2e"]) {
       expect(jobs[id].if, id).toBe(NOT_DOCS_OR_BOARD_ONLY);
     }
     // web and mobile need checks, so they skip with it; their own path flags are false too.

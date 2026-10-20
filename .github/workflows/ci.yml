@@ -259,11 +259,10 @@ jobs:
       - name: Expo export
         run: pnpm --filter @querymodule/mobile export
 
-  # Task 29 (BR-006, SEC-006, NFR-003): builds the runtime image, boots it on
-  # a fresh throwaway volume, runs boot-smoke's ops checks, then a smoke
-  # Playwright pass (axe, CSP) against the running container. Path-scoped
-  # like the other heavy jobs; the down step always runs so a failed build or
-  # smoke pass still stops the container and drains the port.
+  # Task 29 (BR-006, SEC-006, NFR-003): builds the runtime image once and
+  # uploads it; the `e2e` shards boot it on fresh throwaway volumes, run
+  # boot-smoke's ops checks and the smoke Playwright pass (axe, CSP) against
+  # the running container (#748). Path-scoped like the other heavy jobs.
   image:
     name: image
     needs: [changes, checks]
@@ -301,6 +300,45 @@ jobs:
             --cache-to type=gha,mode=max \
             .
 
+      # C2 (round 1 review), #748: the e2e shards and publish all load these exact bytes,
+      # never a rebuild in another job. Saved on every run, since every shard needs it;
+      # publish (push to main only) downloads the same artifact once ci has passed.
+      - name: "13: save the image for the e2e shards and publish"
+        run: docker save querymodule:ci -o "$RUNNER_TEMP/querymodule-image.tar"
+      - name: "13: upload the image artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: querymodule-image
+          path: ${{ runner.temp }}/querymodule-image.tar
+          retention-days: 1
+
+  # #748: the smoke Playwright pass (axe, CSP), split into three shards so the stage stays
+  # well under the 35-minute limit. Each shard loads the one image `image` built, boots its
+  # own copy on a fresh throwaway volume (boot-smoke's ops checks included) and runs its
+  # third of the suite. fail-fast is off so one failing shard never hides another's result;
+  # a matrix job's result is failure when any leg fails, so the `ci` aggregate fails too.
+  # The down step always runs so a failed boot or shard still stops the container.
+  e2e:
+    name: e2e (shard ${{ matrix.shard }}/3)
+    needs: [changes, image]
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: querymodule-image
+          path: ${{ runner.temp }}
+      - name: "13: load the image `image` built"
+        run: docker load -i "$RUNNER_TEMP/querymodule-image.tar"
+
       - name: "11: boot smoke up (health, triggers, seed)"
         run: bash scripts/ci/boot-smoke.sh up querymodule:ci
 
@@ -313,34 +351,21 @@ jobs:
       - name: Install Playwright browser
         run: pnpm --filter @querymodule/web exec playwright install --with-deps chromium
 
-      - name: "12: Playwright M0 suite (harness, login, keyboard, themes, heartbeat; axe, CSP)"
+      - name: "12: Playwright M0 suite, this shard (harness, login, keyboard, themes, heartbeat; axe, CSP)"
         # SEED_PASSWORD_SECRET_FILE comes from step 11 (boot-smoke.sh up writes it to
-        # $GITHUB_ENV): a throwaway secret for this run's container only. The smoke user's
+        # $GITHUB_ENV): a throwaway secret for this shard's container only. The smoke user's
         # password is derived from it as smoke.sh does (derivePassword, spec 8.5), masked
         # before it reaches the environment, never echoed and never on a process argv.
         # QM_BASE_URL comes from step 11 too: boot-smoke.sh sets it to the container's
         # PUBLIC_ORIGIN (http://localhost:3000), which sign-in and the WebSocket upgrade
-        # check the browser's Origin against.
+        # check the browser's Origin against. SHARD arrives through env, never interpolated.
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           pw=$(node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHmac("sha256",f.readFileSync(process.argv[1],"utf8").trim()).update(process.argv[2].toLowerCase()).digest("base64url"))' "$SEED_PASSWORD_SECRET_FILE" smoke@example.test)
           echo "::add-mask::$pw"
           export E2E_USER_EMAIL=smoke@example.test E2E_USER_PASSWORD="$pw"
-          E2E_BASE_URL=$QM_BASE_URL pnpm --filter @querymodule/web exec playwright test
-
-      # C2 (round 1 review): publish must ship the exact bytes steps 10-12
-      # just smoke-tested, not a fresh rebuild in a different job. Save the
-      # loaded image here, on push to main only, so publish can load and
-      # push it without rebuilding anything.
-      - name: "13: save the smoke-tested image for publish"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: docker save querymodule:ci -o "$RUNNER_TEMP/querymodule-image.tar"
-      - name: "13: upload the image artifact"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v7
-        with:
-          name: querymodule-image
-          path: ${{ runner.temp }}/querymodule-image.tar
-          retention-days: 1
+          E2E_BASE_URL=$QM_BASE_URL pnpm --filter @querymodule/web exec playwright test --shard="$SHARD/3"
 
       - name: "11: boot smoke down (SIGTERM, clean exit, no key material in logs)"
         if: always()
@@ -381,7 +406,7 @@ jobs:
   # unknown result, or no jobs at all fail it.
   ci:
     name: ci
-    needs: [changes, board, checks, test, web, mobile, image]
+    needs: [changes, board, checks, test, web, mobile, image, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -405,7 +430,7 @@ jobs:
           '
 
   # Task 29 (BR-006, SEC-006, NFR-003): publishes the exact image bytes the
-  # `image` job already built, boot-smoked and ran Playwright against
+  # `image` job built and every `e2e` shard boot-smoked and ran Playwright against
   # (C2, round 1 review): it loads the artifact that job uploaded and pushes
   # it, rebuilding nothing. Push to main only; a PR never has packages: write.
   # The explicit ci result check matters: without a status function the `if:`
