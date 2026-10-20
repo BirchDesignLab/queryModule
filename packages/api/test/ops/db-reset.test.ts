@@ -168,7 +168,7 @@ describe("#821 db:reset usage", () => {
   });
 });
 
-describe("#821 db:reset guards (ADR-0015)", () => {
+describe("#821 db:reset guards (ADR-0016)", () => {
   it("refuses with the env gate off, before opening the database", async () => {
     const s = await seededSite();
     const before = await s.snapshot();

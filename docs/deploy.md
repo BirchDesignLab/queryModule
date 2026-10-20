@@ -101,7 +101,7 @@ Backups hold superseded and deleted credential ciphertext for up to 30 days, rec
 
 ## Reset and reseed the demo database
 
-`db:reset` (`scripts/ops/db-reset.ts`, [ADR-0015](decisions/0015-demo-database-reset.md), #821) replaces the whole demo database: it backs it up, deletes it, migrates a fresh one (which recreates the audit triggers), runs the seed and then `add-demo-users`. The old database's audit rows go with the file and stay in the backup. The developer runs it on the deploy host; no session ever runs it against the host.
+`db:reset` (`scripts/ops/db-reset.ts`, [ADR-0016](decisions/0016-demo-database-reset-guards.md), #821) replaces the whole demo database: it backs it up, deletes it, migrates a fresh one (which recreates the audit triggers), runs the seed and then `add-demo-users`. The old database's audit rows go with the file and stay in the backup. The developer runs it on the deploy host; no session ever runs it against the host.
 
 It refuses, with no backup taken and nothing deleted, unless all of these hold: `ALLOW_MOCK_SOURCES=true` and every source of the loaded site is mock; `--confirm` names the loaded site's id; the `app` service does not answer `http://app:<PORT>/api/v1/health` (a refused connection or an unknown host means stopped; any other probe failure refuses); and the database is not busy when it checks. A site with any real source can never pass. If the backup fails, nothing is deleted.
 

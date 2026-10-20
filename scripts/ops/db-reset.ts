@@ -1,6 +1,6 @@
 // Usage (deploy host, app stopped; docs/deploy.md "Reset and reseed the demo database"):
 //   docker compose run --rm -v qm-backup-staging:/backup app node scripts/ops/db-reset.js --confirm <site>
-// #821, ADR-0015: backs up the demo database into /backup (outside /data), then deletes it,
+// #821, ADR-0016: backs up the demo database into /backup (outside /data), then deletes it,
 // migrates a fresh one, runs the seed and add-demo-users. Refuses unless ALLOW_MOCK_SOURCES is on
 // and the loaded site is mock only, --confirm names that site, the app service does not answer
 // its health route and the database is not busy. Prints the backup file and each demo password

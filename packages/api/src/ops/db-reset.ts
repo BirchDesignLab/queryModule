@@ -10,7 +10,7 @@ import { AddDemoUsersPartialFailureError, addMissingDemoUsers } from "./add-demo
 import { takeBackup } from "./backup";
 
 /*
- * #821, ADR-0015: the one path that removes audit rows, and only by replacing the whole demo
+ * #821, ADR-0016: the one path that removes audit rows, and only by replacing the whole demo
  * database file after a backup. The triggers are never dropped: the old file goes whole and the
  * fresh one is migrated, which recreates them. Guards, each refusing with fixed text and nothing
  * left behind: ALLOW_MOCK_SOURCES, the app does not answer its health route (both before the
@@ -102,7 +102,7 @@ function mockOnly(d: AppDeps): boolean {
 async function guard(d: AppDeps, site: string): Promise<void> {
   if (!mockOnly(d))
     throw new Refused(
-      "the loaded site has a source that is not mock; db-reset runs on a mock-only demo site only (ADR-0015)",
+      "the loaded site has a source that is not mock; db-reset runs on a mock-only demo site only (ADR-0016)",
     );
   if (d.config.current().siteConfig.site.id !== site)
     throw new Refused("--confirm does not name the loaded site");
@@ -152,7 +152,7 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
   };
   if (!o.env.allowMockSources)
     return refuse(
-      "ALLOW_MOCK_SOURCES is not true; db-reset runs on a mock-only demo site only (ADR-0015)",
+      "ALLOW_MOCK_SOURCES is not true; db-reset runs on a mock-only demo site only (ADR-0016)",
     );
   if (!existsSync(o.env.dbFile)) return refuse("there is no database to reset");
   // Guard 3 before the database is opened (CW3 review Q3): opening runs the start sequence
