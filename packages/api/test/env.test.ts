@@ -90,6 +90,8 @@ describe("readDeployEnv", () => {
       "https://user@a.example.test",
       "https://a.example.test:99999",
       "https://A.example.test",
+      // #829 G-m3: the default port written out is not the origin either.
+      "https://a.example.test:443",
     ]) {
       let msg = "";
       try {
@@ -108,6 +110,28 @@ describe("readDeployEnv", () => {
       readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, CORS_ORIGINS: "http://localhost:5173" }, defaults)
         .corsOrigins,
     ).toEqual(["http://localhost:5173"]);
+  });
+  it("fails closed on a PUBLIC_ORIGIN that is not exactly an origin, naming the key, never the value (#829 G-m3)", () => {
+    for (const bad of [
+      "https://a.example.test/",
+      "https://a.example.test?x=1",
+      "https://user@a.example.test",
+      "https://A.example.test",
+      "https://a.example.test:443",
+      "http://a.example.test:80",
+    ]) {
+      let msg = "";
+      try {
+        readDeployEnv({ PUBLIC_ORIGIN: bad }, defaults);
+      } catch (e) {
+        msg = e instanceof Error ? e.message : String(e);
+      }
+      expect(msg, bad).toMatch(/PUBLIC_ORIGIN/);
+      expect(msg, bad).not.toContain(bad);
+    }
+    expect(
+      readDeployEnv({ PUBLIC_ORIGIN: "https://a.example.test:8443" }, defaults).corsOrigins,
+    ).toEqual(["https://a.example.test:8443"]);
   });
   it("fails closed on a PORT that is not an integer from 1 to 65535 (spec 8.1)", () => {
     for (const PORT of ["abc", "0", "65536", "80.5", "3000abc", ""]) {

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ConfigDocumentSchema } from "@querymodule/core/contracts";
 import { eq } from "drizzle-orm";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { loadLiveConfig } from "../../src/admin/config/store";
 import { user } from "../../src/db/schema";
 import { buildDeps } from "../../src/deps";
 import {
@@ -28,6 +29,40 @@ import { removeTempDirs } from "../helpers/temp-dirs";
  * the builder's publish path (saveDraft, publishDraft, activate) with the normal configPublished
  * row as a named admin (BR-001, BR-004, SEC-010). The published label overlay is kept.
  */
+
+/*
+ * #825 C-M1 race seams: each hook runs once, at the gap it names, then clears. Every other call
+ * passes through unchanged (the builder's routes import the same functions).
+ */
+const hooks = vi.hoisted(() => ({
+  afterDraftCheck: null as null | (() => Promise<void>),
+  beforePublish: null as null | (() => Promise<void>),
+}));
+vi.mock("../../src/admin/config/draft", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/admin/config/draft")>();
+  return {
+    ...m,
+    sharedDraft: async (...a: Parameters<typeof m.sharedDraft>) => {
+      const r = await m.sharedDraft(...a);
+      const h = hooks.afterDraftCheck;
+      hooks.afterDraftCheck = null;
+      if (h) await h();
+      return r;
+    },
+  };
+});
+vi.mock("../../src/admin/config/publish", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/admin/config/publish")>();
+  return {
+    ...m,
+    publishDraft: async (...a: Parameters<typeof m.publishDraft>) => {
+      const h = hooks.beforePublish;
+      hooks.beforePublish = null;
+      if (h) await h();
+      return m.publishDraft(...a);
+    },
+  };
+});
 
 const bundled = resolve(import.meta.dirname, "../../../config");
 const created: string[] = [];
@@ -366,6 +401,189 @@ describe("BR-001 SEC-010 CFG-4 config:import publishes as the named admin", () =
     ]);
     const secret = new TypeError("document text ZZSECRET");
     expect(refusalLines(secret)).toEqual(["config:import failed: TypeError"]);
+    // #825: a busy database names its driver code, never the message (docs/deploy.md)
+    const busy = Object.assign(new Error("SQLITE_BUSY: database is locked ZZSECRET"), {
+      name: "LibsqlError",
+      code: "SQLITE_BUSY",
+    });
+    expect(refusalLines(busy)).toEqual(["config:import failed: LibsqlError SQLITE_BUSY"]);
+  });
+});
+
+describe("#825 config:import draft races, cleanup and attribution", () => {
+  /** The stored draft row's adminAudit flag and author: the builder's draft keeps true. */
+  const draftRow = async (a: AdminConfigApp) => {
+    const row = (await a.versionRows()).find((v) => v.status === "draft");
+    if (!row) return undefined;
+    const doc = JSON.parse(row.document) as { siteConfig: { features: { adminAudit: boolean } } };
+    return {
+      version: row.version,
+      createdBy: row.createdBy,
+      adminAudit: doc.siteConfig.features.adminAudit,
+    };
+  };
+
+  it("a builder draft saved after the draft check is not overwritten: the import refuses and publishes nothing (C-M1)", async () => {
+    const { a } = await adminApp();
+    const implementer = await a.userId("implementer");
+    const v1 = await a.exportVersion(1);
+    hooks.afterDraftCheck = async () => {
+      const r = await a.call("implementer", "PUT", `${API}/draft`, {
+        baseVersion: 1,
+        document: v1,
+      });
+      expect(r.status).toBe(200);
+    };
+    const e = await refusal(run(a, imageFile(auditOff)));
+    expect(hooks.afterDraftCheck).toBeNull();
+    expect(e.keys).toEqual([{ key: "configImport.draftConflict", path: "" }]);
+    expect(await draftRow(a)).toEqual({ version: 2, createdBy: implementer, adminAudit: true });
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+  });
+
+  it("with --replace-draft, a builder save in place after the draft check is not overwritten (C-M1)", async () => {
+    const { a } = await adminApp();
+    const implementer = await a.userId("implementer");
+    const v1 = await a.exportVersion(1);
+    const put = (document: unknown) =>
+      a.call("implementer", "PUT", `${API}/draft`, { baseVersion: 1, document });
+    expect((await put(v1)).status).toBe(200);
+    const [key] = Object.keys(a.t.deps.config.current().locales.en ?? {});
+    const newer = { ...v1, locales: { en: { [String(key)]: "Newer builder text" } } };
+    hooks.afterDraftCheck = async () => {
+      expect((await put(newer)).status).toBe(200);
+    };
+    const e = await refusal(run(a, imageFile(auditOff), { replaceDraft: true }));
+    expect(e.keys).toEqual([{ key: "configImport.draftConflict", path: "" }]);
+    expect(await draftRow(a)).toEqual({ version: 2, createdBy: implementer, adminAudit: true });
+    const stored = (await a.versionRows()).find((v) => v.status === "draft")?.document ?? "";
+    expect(stored).toContain("Newer builder text");
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+  });
+
+  it("a builder save in place between the import's draft save and its publish is not published as the admin (C-M1)", async () => {
+    const { a } = await adminApp();
+    const implementer = await a.userId("implementer");
+    const v1 = await a.exportVersion(1);
+    hooks.beforePublish = async () => {
+      const r = await a.call("implementer", "PUT", `${API}/draft`, {
+        baseVersion: 1,
+        document: v1,
+      });
+      expect(r.status).toBe(200);
+    };
+    const e = await refusal(run(a, imageFile(auditOff)));
+    expect(hooks.beforePublish).toBeNull();
+    expect(e.keys).toEqual([{ key: "configImport.draftConflict", path: "" }]);
+    // the builder's draft is not this run's document, so the cleanup leaves it
+    expect(await draftRow(a)).toEqual({ version: 2, createdBy: implementer, adminAudit: true });
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+    expect(a.t.deps.config.current().siteConfig.features.adminAudit).toBe(true);
+  });
+
+  it("a publish that throws removes this run's draft and surfaces the original error class (C-M3)", async () => {
+    const { a } = await adminApp();
+    const before = await snapshot(a);
+    const real = a.t.deps.audit;
+    a.t.deps.audit = {
+      record: async (tx, ev) => {
+        if (ev.type === "configPublished") throw new TypeError("audit down ZZSECRET");
+        return real.record(tx, ev);
+      },
+    };
+    const e = await run(a, imageFile(auditOff)).then(
+      () => undefined,
+      (x: unknown) => x,
+    );
+    a.t.deps.audit = real;
+    expect(e).toBeInstanceOf(TypeError);
+    expect(refusalLines(e)).toEqual(["config:import failed: TypeError"]);
+    expect(await snapshot(a)).toEqual(before);
+  });
+
+  it("a cleanup that throws after a throwing publish does not mask the original error (C-M2)", async () => {
+    const { a } = await adminApp();
+    const real = a.t.deps.audit;
+    const db = a.t.deps.db;
+    a.t.deps.audit = {
+      record: async (tx, ev) => {
+        if (ev.type === "configPublished") {
+          // the next transaction (the cleanup) fails too
+          vi.spyOn(db, "transaction").mockImplementationOnce(() =>
+            Promise.reject(new RangeError("cleanup down")),
+          );
+          throw new TypeError("audit down");
+        }
+        return real.record(tx, ev);
+      },
+    };
+    const e = await run(a, imageFile(auditOff)).then(
+      () => undefined,
+      (x: unknown) => x,
+    );
+    a.t.deps.audit = real;
+    vi.mocked(db.transaction).mockRestore();
+    expect(e).toBeInstanceOf(TypeError);
+    expect(refusalLines(e)).toEqual(["config:import failed: TypeError"]);
+  });
+
+  it("a refused publish after --replace-draft says the replaced draft is not restored and leaves no draft (C-M3)", async () => {
+    const { a } = await adminApp();
+    const v1 = await a.exportVersion(1);
+    expect(
+      (await a.call("implementer", "PUT", `${API}/draft`, { baseVersion: 1, document: v1 })).status,
+    ).toBe(200);
+    const current = a.t.deps.config.current();
+    a.t.deps.config.swap({ ...current, versionId: "00000000-0000-7000-8000-000000000000" });
+    const e = await refusal(run(a, imageFile(auditOff), { replaceDraft: true }));
+    expect(e.keys).toEqual([{ key: "configImport.draftConflict", path: "" }]);
+    expect(e.message).toContain("is not restored");
+    expect(await draftRow(a)).toBeUndefined();
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+  });
+
+  it("the configPublished row takes identitySource and hostSubject from the admin's user row (C-M4, SEC-010)", async () => {
+    const { a, adminId } = await adminApp();
+    // a local admin (every demo admin) gives exactly the values the import wrote before C-M4
+    expect((await run(a, imageFile(auditOff))).kind).toBe("published");
+    await a.t.deps.db
+      .update(user)
+      .set({
+        identitySource: "host",
+        hostIssuer: "https://idp.example.test",
+        hostSubject: "host-sub-1",
+      })
+      .where(eq(user.id, adminId));
+    expect((await run(a, ALL_ON)).kind).toBe("published");
+    const rows = await a.t.deps.db.$client.execute(
+      "SELECT actor_user_id, identity_source, host_subject FROM audit_event WHERE type = 'configPublished' ORDER BY id",
+    );
+    expect(rows.rows.map((r) => [r.actor_user_id, r.identity_source, r.host_subject])).toEqual([
+      [adminId, "local", null],
+      [adminId, "host", "host-sub-1"],
+    ]);
+  });
+
+  it("a published label overlay alone does not count as the file ignored at boot (C-M5)", async () => {
+    const { a } = await adminApp();
+    const [key] = Object.keys(a.t.deps.config.current().locales.en ?? {});
+    const v1 = await a.exportVersion(1);
+    const put = await a.call("implementer", "PUT", `${API}/draft`, {
+      baseVersion: 1,
+      document: { ...v1, locales: { en: { [String(key)]: "Overlay text" } } },
+    });
+    expect(put.status).toBe(200);
+    expect(
+      (await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2 })).status,
+    ).toBe(200);
+    const boot = (file: string) =>
+      loadLiveConfig(a.t.deps.db, {
+        siteConfigFile: file,
+        allowMockSources: a.t.deps.env.allowMockSources,
+        now: a.t.deps.clock.now(),
+      });
+    expect((await boot(ALL_ON)).fileIgnored).toBe(false);
+    expect((await boot(imageFile(auditOff))).fileIgnored).toBe(true);
   });
 });
 

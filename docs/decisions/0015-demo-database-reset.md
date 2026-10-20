@@ -1,6 +1,6 @@
 ---
 date: 10-20-26
-status: accepted
+status: superseded
 track: a
 phase: m2-p3
 supersedes: ["spec 5.5", "spec 8.5"]

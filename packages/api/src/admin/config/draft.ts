@@ -203,11 +203,20 @@ export type SaveDraftResult =
  * its version while it is the newest row; once a publish or rollback has passed it, the save
  * removes it (a draft row is never history) and writes the draft as the next version, so
  * versions stay in history order.
+ *
+ * expectDraft (#825 C-M1, config:import): the shared draft the caller last read, its id and stored
+ * document, or null for none. Checked inside the transaction, so a draft saved, replaced or
+ * removed since that read answers draftConflict and nothing is written. The builder's PUT never
+ * passes it: its save replaces the shared draft by design.
  */
 export async function saveDraft(
   d: AppDeps,
   principal: Principal,
-  body: { baseVersion: number; document: ConfigDocument },
+  body: {
+    baseVersion: number;
+    document: ConfigDocument;
+    expectDraft?: { id: string; document: string } | null;
+  },
 ): Promise<SaveDraftResult> {
   const schema = mockSchemaErrors(body.document, siteIdOf(d));
   if (schema.length > 0) return { ok: false, code: "validationFailed", errors: schema };
@@ -225,6 +234,14 @@ export async function saveDraft(
     const document = JSON.stringify(body.document);
     const now = d.clock.now();
     const draft = await sharedDraft(tx, siteId);
+    const expected = body.expectDraft;
+    if (
+      expected !== undefined &&
+      (expected === null
+        ? draft !== undefined
+        : draft?.id !== expected.id || draft.document !== expected.document)
+    )
+      return { ok: false, code: "draftConflict" };
     const next = await nextVersion(tx, siteId);
     if (draft && draft.version === next - 1) {
       const [row] = await tx
