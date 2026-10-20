@@ -268,6 +268,46 @@ describe("G11 a request that starts sending scrolls the list into view when it i
     expect(low).not.toHaveBeenCalled();
   });
 
+  it("stops bringing the list into view once focus has left the control the request was sent from (#645)", () => {
+    const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
+    const tree = (rows: RequestRowView[]) => (
+      <>
+        <input aria-label="Plate" />
+        <button type="button">Clear</button>
+        <RequestList {...props} rows={rows} revealOnSend />
+      </>
+    );
+    const { rerender } = render(tree([ACKED]));
+    screen.getByLabelText("Plate").focus();
+    rerender(tree([SENDING, ACKED]));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // The user tabs on while the cards arrive: a commit must not scroll them away from the control
+    // they are on, which would leave it outside the viewport or under the action bar.
+    screen.getByRole("button", { name: "Clear" }).focus();
+    rerender(tree([{ ...SENDING, status: "acknowledged" as const }, ACKED]));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not resume when focus comes back to the sending control between two commits (#645)", () => {
+    const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
+    const tree = (rows: RequestRowView[]) => (
+      <>
+        <input aria-label="Plate" />
+        <button type="button">Clear</button>
+        <RequestList {...props} rows={rows} revealOnSend />
+      </>
+    );
+    const { rerender } = render(tree([ACKED]));
+    screen.getByLabelText("Plate").focus();
+    rerender(tree([SENDING, ACKED]));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // A Tab pass visits Clear and lands on the Plate again with no commit in between.
+    screen.getByRole("button", { name: "Clear" }).focus();
+    screen.getByLabelText("Plate").focus();
+    rerender(tree([{ ...SENDING, status: "acknowledged" as const }, ACKED]));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
   it("never moves focus", () => {
     spyOnLayout(window.innerHeight * 0.8);
     render(

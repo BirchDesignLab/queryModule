@@ -188,14 +188,32 @@ export function RequestList({
   // A reveal stays owed for a few seconds: the list is short when the row starts sending and grows as
   // the cards arrive, so the first scroll may stop at the end of a page that is still short.
   const revealUntil = useRef(0);
+  // Where focus was when the request started sending. The reveal is for a user who sent and is
+  // waiting; once focus has moved on they are navigating, and a scroll back down would carry the
+  // control they are on out of the viewport or under the action bar (WCAG 2.4.11, #645).
+  const revealFocus = useRef<Element | null>(null);
+  // Focus moving to any other control ends the owed reveal at once, even if it comes back before the
+  // next commit.
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent): void => {
+      if (event.target !== revealFocus.current) revealUntil.current = 0;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
   // Every commit: a no-op unless a reveal is owed.
   useEffect(() => {
     if (!revealOnSend) return;
     if (sendingId !== null && sendingId !== seenSending.current) {
       seenSending.current = sendingId;
       revealUntil.current = Date.now() + REVEAL_MS;
+      revealFocus.current = document.activeElement;
     }
     if (Date.now() >= revealUntil.current) return;
+    if (document.activeElement !== revealFocus.current) {
+      revealUntil.current = 0;
+      return;
+    }
     const section = sectionRef.current;
     if (section === null) return;
     if (section.getBoundingClientRect().top > window.innerHeight * REVEAL_TOP) {
