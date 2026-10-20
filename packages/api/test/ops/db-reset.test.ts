@@ -8,9 +8,14 @@ import { openDatabase } from "../../src/db/client";
 import { checkAuditTriggers } from "../../src/db/migrate";
 import { withTransaction } from "../../src/db/tx";
 import { type AppDeps, buildDeps } from "../../src/deps";
-import type { DeployEnv } from "../../src/env";
+import { type DeployEnv, DeployEnvError, readDeployEnv } from "../../src/env";
 import { AddDemoUsersPartialFailureError } from "../../src/ops/add-demo-users";
-import { type DbResetOptions, probeApp, runDbReset } from "../../src/ops/db-reset";
+import {
+  type DbResetOptions,
+  dbResetFailureLine,
+  probeApp,
+  runDbReset,
+} from "../../src/ops/db-reset";
 import { grantRole } from "../../src/ops/grant-role";
 import { derivePassword } from "../../src/seed/password";
 import { SeedPartialFailureError, seedUsers } from "../../src/seed/seed";
@@ -469,5 +474,27 @@ describe.skipIf(process.platform === "win32")("#821 db:reset full run", () => {
       expect(s.logLines.join("\n")).not.toContain(pw);
     }
     expect(stdout).toContain("added 0 missing demo accounts");
+  });
+});
+
+describe("db-reset wrapper failure line (#829 G-m2)", () => {
+  it("names the class and a driver code, never the message; a deploy env error keeps its fixed text", () => {
+    const busy = Object.assign(new Error("SQLITE_BUSY: locked ZZSECRET /data/querymodule.db"), {
+      name: "LibsqlError",
+      code: "SQLITE_BUSY",
+    });
+    expect(dbResetFailureLine(busy)).toBe("db-reset: LibsqlError SQLITE_BUSY\n");
+    expect(dbResetFailureLine(new TypeError("value ZZSECRET"))).toBe("db-reset: TypeError\n");
+    expect(dbResetFailureLine("ZZSECRET")).toBe("db-reset: unknown\n");
+    let envError: unknown;
+    try {
+      readDeployEnv({});
+    } catch (e) {
+      envError = e;
+    }
+    expect(envError).toBeInstanceOf(DeployEnvError);
+    expect(dbResetFailureLine(envError)).toBe(
+      "db-reset: DeployEnvError: PUBLIC_ORIGIN must be an origin like https://host\n",
+    );
   });
 });

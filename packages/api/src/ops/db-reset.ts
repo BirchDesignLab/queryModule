@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import type { Clock } from "../clock";
 import { withTransaction } from "../db/tx";
 import type { AppDeps } from "../deps";
-import type { DeployEnv } from "../env";
+import { type DeployEnv, DeployEnvError } from "../env";
 import { errorFields } from "../log/error-fields";
 import { SeedPartialFailureError, seedUsers } from "../seed/seed";
 import { AddDemoUsersPartialFailureError, addMissingDemoUsers } from "./add-demo-users";
@@ -127,6 +127,16 @@ function printAccounts(
 /** Removes the database file and its WAL and shared-memory files. */
 function removeDatabase(dbFile: string): void {
   for (const f of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) rmSync(f, { force: true });
+}
+
+/**
+ * The wrapper's stderr line for an error that escaped the env read or runDbReset (#829 G-m2):
+ * the class and any driver or system code, plus a DeployEnvError's fixed text; never any other
+ * message (spec 5.9).
+ */
+export function dbResetFailureLine(e: unknown): string {
+  const f = errorFields(e, [DeployEnvError]);
+  return `db-reset: ${f.name}${f.code ? ` ${f.code}` : ""}${f.message ? `: ${f.message}` : ""}\n`;
 }
 
 /** Runs db:reset; returns the exit code (0 done, 1 refused or failed, 2 usage). */
