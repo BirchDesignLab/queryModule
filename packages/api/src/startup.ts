@@ -269,8 +269,8 @@ export interface RunningServer {
   stop(): Promise<void>;
   /**
    * The fatal path's close (spec 8.1), never the drain: sets lifecycle.failed, aborts every
-   * adapter call and stops the sweeper (awaiting a tick in flight), then closes the sockets, the
-   * server (cutting open requests) and the DB without waiting on dispatch.
+   * adapter call, stops the sweeper's timer and closes the server (cutting open requests), then
+   * awaits a tick in flight and closes the sockets and the DB without waiting on dispatch.
    */
   close(): Promise<void>;
 }
@@ -315,13 +315,16 @@ export async function startServer(
       deps.dispatcher.abortAll();
       const sweeperStopped = sweeper.stop();
       ws.stopAccepting();
-      await sweeperStopped;
-      await ws.close();
-      await new Promise<void>((r) => {
+      // the drain's order (#760 C-m3): stop accepting before waiting on a tick in flight
+      const serverClosed = new Promise<void>((r) => {
         server.close(() => r());
         // a request still open (a trickled body, a held T1) must not hold the fatal close
         server.closeAllConnections();
       });
+      // a tick in flight finishes (an expiry closes its sockets with 4001) before the sockets close
+      await sweeperStopped;
+      await ws.close();
+      await serverClosed;
       closeDb(deps);
     },
   };

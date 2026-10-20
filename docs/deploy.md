@@ -54,9 +54,19 @@ systemctl --user list-timers deploy-pull.timer
 
 ## Sessions and the sweeper
 
-The `app` process runs a sweeper every 60 seconds from startup (spec 5.2). Each tick reads the live session limits (`auth.session.absoluteMinutes` and `idleMinutes`; a publish applies on the next tick), deletes at most 500 sessions past either limit, each in its own transaction with a `sessionRevoked` audit row (reason `expired`, system actor), and closes their sockets with 4001. Once an hour it prunes `event_log` (each user's newest row is kept). A failed expiry is logged with the session id and error class and retried on the next tick; the session is already refused at its live limit, so nothing is granted meanwhile. The SIGTERM drain stops the sweeper and waits for a tick in flight before closing the database.
+The `app` process runs a sweeper every 60 seconds from startup (spec 5.2). Each tick reads the live session limits (`auth.session.absoluteMinutes` and `idleMinutes`; a publish applies on the next tick), deletes the sessions past either limit in batches of 500, at most 2,000 per tick, each in its own transaction with a `sessionRevoked` audit row (reason `expired`, system actor), and closes their sockets with 4001 once that transaction commits. Once an hour it prunes `event_log` (each user's newest row is kept). A failed expiry is logged with the session id and error class, skipped for the rest of that tick so it cannot hold up the others, and retried on the next tick; the session is already refused at its live limit, so nothing is granted meanwhile. The SIGTERM drain stops the sweeper between sessions: it waits for at most the one session transaction in flight (no further session and no prune) before closing the database.
 
 Better Auth's own session expiry is fixed at the 7-day ceiling plus one day (`SESSION_CEILING_MINUTES` in `packages/core/src/config/session-limits.ts`, the margin in `packages/api/src/auth/auth.ts`). `config:validate` refuses an `absoluteMinutes` above the ceiling, so the sweeper always ends a session first, with its audit row, and has a day to catch up if it falls behind. A session created before an upgrade keeps the expiry it was stored with.
+
+## Auth limits
+
+| Limit | Key | Value | Effect |
+|---|---|---|---|
+| Sign-in failures per account | `login:acct:<email>` | 10 in 15 minutes | Account locked for 15 minutes |
+| Auth requests per client address | `login:ip:<ip>` | 100 in 15 minutes | 429 on every auth POST |
+| Wrong current password on change-password | `changePassword:<userId>` | 5 in 15 minutes | 429 with `Retry-After` on change-password only; sign-in unaffected; a success clears it |
+
+A wrong guess and the 429 block write no audit row. The limiter logs the user id only.
 
 ## Backups
 
