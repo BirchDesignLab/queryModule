@@ -47,6 +47,8 @@ Then check it: the next smoke run passes (`bash ../scripts/ops/smoke.sh https://
 - One shared draft exists per site. If the dry run reports one, the import refuses; add `--replace-draft` to the import line only when that draft can be discarded (the output names its version and the user who last saved it). A replaced draft is not restored.
 - A refused import publishes nothing: it exits non-zero (1 refused, 2 usage error) and prints the message keys and pointers to stderr, never document content or passwords. Without `--replace-draft` it also writes nothing. With `--replace-draft`, the shared draft it replaced is already gone when the publish is refused (the output says so); the live version is unchanged either way.
 - The command runs in its own process, so the running `app` keeps serving the old version until `docker compose restart app`. Open clients then see the new `configHash`.
+- The import runs while `app` is up, so two processes write the one SQLite database. If the app holds the write lock past the busy timeout, the import stops with a `config:import failed: ... SQLITE_BUSY` line and publishes nothing; run it again. If the next dry run reports a shared draft from that run, add `--replace-draft`.
+- A builder save of the shared draft while the import runs makes the import refuse (`configImport.draftConflict`) and publish nothing; the builder's draft stays. Run the dry run again.
 - `--file <path>` imports another site file in the image; the default is the one boot reads (`SITE_CONFIG`, else the bundled `config/sites/default.json`). Off the host, with the environment the app runs with: `pnpm config:import --dry-run`.
 
 ## First deploy
