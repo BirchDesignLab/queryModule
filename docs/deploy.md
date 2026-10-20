@@ -74,6 +74,31 @@ Backups hold superseded and deleted credential ciphertext for up to 30 days, rec
 
 `scripts/ops/restore-test.sh` restores the newest backup into a throwaway container and compares audit row counts with the backup manifest. It runs at every milestone exit; the result goes into `docs/releases/<milestone>.md`.
 
+## Reset and reseed the demo database
+
+`db:reset` (`scripts/ops/db-reset.ts`, [ADR-0015](decisions/0015-demo-database-reset.md), #821) replaces the whole demo database: it backs it up, deletes it, migrates a fresh one (which recreates the audit triggers), runs the seed and then `add-demo-users`. The old database's audit rows go with the file and stay in the backup. The developer runs it on the deploy host; no session ever runs it against the host.
+
+It refuses, and leaves nothing behind (no backup, no delete), unless all of these hold: `ALLOW_MOCK_SOURCES=true` and every source of the loaded site is mock; `--confirm` names the loaded site's id; the `app` service does not answer `http://app:<PORT>/api/v1/health` (a refused connection or an unknown host means stopped; any other probe failure refuses); and the database is not busy (it takes the write lock first). A site with any real source can never pass. If the backup fails, nothing is deleted.
+
+```bash
+cd ~/git/queryModule/deploy
+docker compose stop app
+docker volume create qm-backup-staging >/dev/null
+docker run --rm -v qm-backup-staging:/backup alpine:3 chown 10001:10001 /backup
+docker compose run --rm -v qm-backup-staging:/backup app node scripts/ops/db-reset.js --confirm <site>
+# store the printed passwords in a password manager
+docker compose start app
+bash ../scripts/ops/smoke.sh https://querymodule.birchdesignlab.com
+```
+
+The output names the backup it took, `/backup/db-reset-<stamp>/querymodule.db`, with the manifest's audit row count and max id. Its passwords print once, to this command's stdout only. To put the old database back, stop the app, copy that backup over the database in `/data` with the app's owner, and start the app (replace `<stamp>`):
+
+```bash
+docker compose stop app
+docker run --rm -v querymodule_data:/data -v qm-backup-staging:/backup alpine:3 sh -c 'rm -f /data/querymodule.db-wal /data/querymodule.db-shm && cp /backup/db-reset-<stamp>/querymodule.db* /data/ && chown 10001:10001 /data/querymodule.db*'
+docker compose start app
+```
+
 ## Runbooks
 
 - Lost `CREDENTIAL_KEY`: `scripts/ops/lost-key.ts` (steps in its header).

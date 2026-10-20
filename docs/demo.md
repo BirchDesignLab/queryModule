@@ -104,7 +104,7 @@ configuration** for everyone on that site, so do it on a rehearsal site or put i
    the demo is back to a calm story 2. The failed row stays in the list.
 
 **Rehearsal rows stay.** "Requests this shift" keeps every request an account has made, across
-sign-ins; nothing in the app clears it. The only reset is `db:reset`, which replaces the whole demo
+sign-ins; nothing in the app clears it. The only reset is [`db:reset`](deploy.md#reset-and-reseed-the-demo-database), which replaces the whole demo
 database after a backup ([ADR-0015](decisions/0015-demo-database-reset.md)). So without a reset, a
 rehearsal on `dispatcher@example.test` is still in that list on the day. Rehearse with another
 account, for example `records@example.test` (also role `user`), or accept the rows. The demo
@@ -118,7 +118,7 @@ its history.
 `POST /api/v1/queries`, so every row is a real, audited request. It never deletes, never resets and
 never touches the database directly: it only signs in, reads the config, reads the list and submits.
 The vehicle stories send the year `26`, as the story table's `..26` commands do, so both sources
-run (a plate alone would ask only the State system). Run it once against the demo database, then leave it; to start again, reset the demo database with `db:reset` ([ADR-0015](decisions/0015-demo-database-reset.md)) and seed again.
+run (a plate alone would ask only the State system). Run it once against the demo database, then leave it; to start again, reset the demo database with [`db:reset`](deploy.md#reset-and-reseed-the-demo-database) ([ADR-0015](decisions/0015-demo-database-reset.md)) and seed again.
 
 **Which database it targets.** The one behind the base URL you pass as the argument, and nothing
 else: the script has no database connection of its own. For the live demo that is
@@ -417,5 +417,5 @@ database silently seedable again:
 - The officer accounts also get a stored `mobileUnit` persona. If the run stopped before that, the
   account works with the device layout until the demo database is reset and seeded again.
 - To seed the remaining demo users, either grant their roles by hand the same way, or reset the
-  demo database with `db:reset` ([ADR-0015](decisions/0015-demo-database-reset.md)), which backs it up, then
+  demo database with [`db:reset`](deploy.md#reset-and-reseed-the-demo-database) ([ADR-0015](decisions/0015-demo-database-reset.md)), which backs it up, then
   migrates, seeds and adds the demo accounts from empty.
