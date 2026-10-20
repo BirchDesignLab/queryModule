@@ -61,6 +61,10 @@ for (const size of SIZES) {
     await form.getByRole("radio", { name: "Table" }).check();
     const table = form.getByRole("table", { name: "Columns" });
     await expect(table).toBeVisible();
+    // The new row is empty, so the draft check (debounced, then validated) adds an error under its
+    // Path and Label a moment later and pushes everything below down by a line. Measure after it
+    // has settled: read mid-shift, two boxes taken one call apart differ by the shift (#773).
+    await expect(form.locator(".qm-admin__issue--error")).toHaveCount(2);
     const wrap = form
       .locator("div.qm-columns")
       .filter({ has: page.getByRole("table", { name: "Columns" }) });
