@@ -61,6 +61,16 @@ for (const size of SIZES) {
     await form.getByRole("radio", { name: "Table" }).check();
     const table = form.getByRole("table", { name: "Columns" });
     await expect(table).toBeVisible();
+    // The new row's Path is empty, so the draft check (debounced, then validated) adds an error to
+    // it a moment later, in the row editor and in the table cell, and pushes everything below down
+    // by a line. Measure after it has settled: read mid-shift, two boxes taken one call apart differ
+    // by the shift (#773).
+    await expect(form.getByRole("combobox", { name: "Path" })).toHaveAccessibleDescription(
+      /Too small/,
+    );
+    await expect(
+      table.getByRole("textbox", { name: "Path of column 1" }),
+    ).toHaveAccessibleDescription(/Too small/);
     const wrap = form
       .locator("div.qm-columns")
       .filter({ has: page.getByRole("table", { name: "Columns" }) });
