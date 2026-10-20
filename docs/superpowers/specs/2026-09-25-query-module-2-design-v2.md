@@ -689,7 +689,7 @@ Admin and ops events:
 |---|---|
 | `roleChanged` | `targetUserId`, `role`, `fromRole` (the role held before the change; M2, #523), `change` (`granted`\|`revoked`), `via` (`grant-role`\|`adminConsole`); `grant-role` rows are written by the system actor, `adminConsole` rows by the admin who changed the role (5.6, ADR-0011 item 8) |
 | `configPublished` | `siteId`, `versionId`, `version`, `configHash`, `previousConfigHash`, `changedPointers` (JSON pointers only, never values), `rollbackOf?`; one row per publish or rollback, written by the admin or implementer who acted (ADR-0011 item 7) |
-| `userCreated` | `targetUserId`, `role`; written by the admin who created the user; the one-time password is never audited (ADR-0011 item 8) |
+| `userCreated` | `targetUserId`, `role`, `via?` (`add-demo-users`); written by the admin who created the user, or with `via: "add-demo-users"` by the system actor (the ops script that adds missing demo accounts, #781); the one-time password is never audited (ADR-0011 item 8) |
 | `auditViewed` | `filters` (`userId?`, `correlationId?`, `type?`, `from`, `to`), `cursor?`, `rowCount`; written by the admin who read the page |
 | `auditExported` | `filters`, `rowCount`, `format: "ndjson"`; written by the admin who exported |
 | `configLoaded` | `siteId`, `configHash`, `configSchemaVersion`, `coreVersion`, `extendsChain` (site ids) |
@@ -943,6 +943,7 @@ Two identity modes behind `IdentityService.resolve(req) -> Principal` (5.5). Eve
 |---|---|---|
 | Target account, failed sign-ins | 10 per 15 min | Account locked 15 min; further attempts rejected without password check |
 | Client IP, auth requests | 100 per 15 min | 429 for the rest of the window |
+| User, wrong current password at change-password (D-M2P3-3) | 5 per 15 min | 429 on change-password only for the rest of the window; sign-in unaffected, no audit row |
 | Officer, failed delegation code redemptions (5.7) | 5 per 15 min | Redemption blocked 15 min |
 
 Lockouts are audited: the `loginFailed` row whose failure starts a lockout carries `lockoutUntil` (4.7).
