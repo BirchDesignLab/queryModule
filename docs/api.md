@@ -316,7 +316,9 @@ A version row (`ConfigVersion`) has `id`, `version`, `status` (`draft`, `publish
 `publishedBy`, `publishedAt` and `rollbackOf`, and two optional fields: `note`, the publisher's
 change note (`POST /admin/config/publish` takes an optional `note`, 1 to 200 characters, stored
 trimmed; a rollback has none), and `publishedByName`, the publisher's display name (absent for the
-system seed or once that user row is gone). The note is never written to the audit row. A publish
+system seed or once that user row is gone). The 200 answers of `POST /admin/config/publish` and
+`POST .../rollback` carry `publishedByName` the same way: the publisher's display name, absent once
+that user row is gone. The note is never written to the audit row. A publish
 takes effect for open dispatcher forms within 15 seconds: clients refetch `GET /config` on that
 interval and on window focus.
 
