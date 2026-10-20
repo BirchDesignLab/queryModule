@@ -16,6 +16,7 @@ import { bootstrapDocument, ConfigLoadError, canonicalJson } from "../config/loa
 import { siteConfigVersion, user } from "../db/schema";
 import { withTransaction } from "../db/tx";
 import type { AppDeps } from "../deps";
+import { errorFields } from "../log/error-fields";
 import type { Principal } from "../seams";
 
 /** The publish note on the imported version's row (D-M2P0-4); never in audit details (D-M2P2-B7). */
@@ -125,7 +126,8 @@ const refuse = (reason: string, key: string): ConfigImportRefusedError =>
  * The admin the import publishes as: the user row by email (trimmed, lowercased, as grant-role
  * matches; never Unicode-normalized), active (disabledAt unset) and holding `admin`. The flag
  * must_change_password does not matter here: no session signs in. The principal is built as
- * identity.ts builds one from the user row; no session exists, so sessionId names this command.
+ * identity.ts builds one from the user row, identitySource and hostSubject included (#825 C-M4,
+ * SEC-010 attribution); no session exists, so sessionId names this command.
  */
 async function importAdmin(d: AppDeps, adminEmail: string): Promise<Principal> {
   const email = adminEmail.trim().toLowerCase();
@@ -133,7 +135,14 @@ async function importAdmin(d: AppDeps, adminEmail: string): Promise<Principal> {
     email === ""
       ? []
       : await d.db
-          .select({ id: user.id, email: user.email, role: user.role, disabledAt: user.disabledAt })
+          .select({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            disabledAt: user.disabledAt,
+            identitySource: user.identitySource,
+            hostSubject: user.hostSubject,
+          })
           .from(user)
           .where(eq(user.email, email));
   if (!u) throw refuse("no user with that email", "configImport.adminUnknown");
@@ -145,7 +154,8 @@ async function importAdmin(d: AppDeps, adminEmail: string): Promise<Principal> {
     email: auditEmail(u.email),
     role: "admin",
     sessionId: "ops:config-import",
-    identitySource: "local",
+    identitySource: u.identitySource,
+    ...(u.hostSubject === null ? {} : { hostSubject: u.hostSubject }),
     authenticatedAt: d.clock.now(),
   };
 }
@@ -169,6 +179,18 @@ async function removeOwnDraft(d: AppDeps, id: string, document: string): Promise
 }
 
 /**
+ * Removes this run's draft after a failed publish. A cleanup that throws never replaces the
+ * error being reported (#825 C-M2): the draft then stays, and the next run reports it.
+ */
+async function cleanUp(d: AppDeps, id: string, document: string): Promise<void> {
+  try {
+    await removeOwnDraft(d, id, document);
+  } catch {
+    // the original error or refusal is the one the operator needs
+  }
+}
+
+/**
  * #792 CFG-4, D-M2P3-4: publishes the image's site config on a seeded store. The file is resolved
  * and validated as boot does (bootstrapDocument: the mock gate applies), with the published label
  * overlay kept (the image carries none), then checked as a publish is (validateDocument: site,
@@ -177,7 +199,9 @@ async function removeOwnDraft(d: AppDeps, id: string, document: string): Promise
  * import saves the document as the shared draft (refused while another draft exists unless
  * `replaceDraft`) and publishes it through publishDraft, so activate() writes configLoaded and
  * configPublished (actor: the named admin) in one transaction, with IMPORT_NOTE on the row only.
- * A refused publish removes this run's draft. The admin is checked before anything else.
+ * The save checks, inside its transaction, that the shared draft is still the one read here, and
+ * the publish that its draft is still this run's (#825 C-M1): a builder save in either gap
+ * refuses. A refused or throwing publish removes this run's draft. The admin is checked first.
  */
 export async function importSiteConfig(
   d: AppDeps,
@@ -224,10 +248,17 @@ export async function importSiteConfig(
       `config:import refused: ${draftText(draft)} exists; add --replace-draft to replace it`,
       [{ key: "configImport.draftExists", path: "" }],
     );
-  const saved = await saveDraft(d, principal, { baseVersion: live.version, document });
+  const saved = await saveDraft(d, principal, {
+    baseVersion: live.version,
+    document,
+    expectDraft: existing ? { id: existing.id, document: existing.document } : null,
+  });
   if (!saved.ok)
     throw saved.code === "draftConflict"
-      ? refuse("the live version changed; run it again", "configImport.draftConflict")
+      ? refuse(
+          "the live version or the shared draft changed; run it again",
+          "configImport.draftConflict",
+        )
       : new ConfigImportRefusedError(
           "config:import refused: the draft was not saved",
           saved.errors.map((e) => ({ key: e.key, path: String(e.params?.path ?? "") })),
@@ -236,13 +267,16 @@ export async function importSiteConfig(
   const lost = replacedDraft ? `; the replaced ${draftText(replacedDraft)} is not restored` : "";
   let r: Awaited<ReturnType<typeof publishDraft>>;
   try {
-    r = await publishDraft(d, principal, saved.row.version, IMPORT_NOTE);
+    r = await publishDraft(d, principal, saved.row.version, IMPORT_NOTE, {
+      id: saved.row.id,
+      document: saved.row.document,
+    });
   } catch (e) {
-    await removeOwnDraft(d, saved.row.id, saved.row.document);
+    await cleanUp(d, saved.row.id, saved.row.document);
     throw e;
   }
   if (!r.ok) {
-    await removeOwnDraft(d, saved.row.id, saved.row.document);
+    await cleanUp(d, saved.row.id, saved.row.document);
     if (r.code === "validationFailed")
       throw new ConfigImportRefusedError(
         `config:import refused: the publish did not validate${lost}`,
@@ -310,9 +344,14 @@ export function importReport(
   }
 }
 
-/** The command's stderr lines for a failure: a refusal's message and keys, else the error class. */
+/**
+ * The command's stderr lines for a failure: a refusal's message and keys, else the error class
+ * and its driver or system code (SQLITE_BUSY, #825), never the message (spec 5.9).
+ */
 export function refusalLines(e: unknown): string[] {
   if (e instanceof ConfigImportRefusedError)
     return [e.message, ...e.keys.map((k) => `  ${k.key} ${k.path || "/"}`)];
-  return [`config:import failed: ${e instanceof Error ? e.name : "error"}`];
+  if (!(e instanceof Error)) return ["config:import failed: error"];
+  const f = errorFields(e);
+  return [`config:import failed: ${f.code ? `${f.name} ${f.code}` : f.name}`];
 }

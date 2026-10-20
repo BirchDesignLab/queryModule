@@ -1,10 +1,11 @@
 import {
+  configChanged,
   fetchClientConfig,
   type HeartbeatResult,
   runHeartbeatProbe,
   type SocketLike,
 } from "@querymodule/client";
-import type { ClientSiteConfig } from "@querymodule/core/config";
+import type { ClientSiteConfigResponse } from "@querymodule/core/config";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -91,8 +92,8 @@ export function useStatusChecks(): { checks: StatusChecks; run: () => void } {
       (next): "done" | "failed" => {
         if (!live()) return "done";
         // A newer answer replaces the cache the way the background refresh does.
-        const current = queryClient.getQueryData<ClientSiteConfig>(["config"]);
-        if (current === undefined || current.configHash !== next.configHash) {
+        const current = queryClient.getQueryData<ClientSiteConfigResponse>(["config"]);
+        if (configChanged(current, next)) {
           queryClient.setQueryData(["config"], next);
         }
         return "done";

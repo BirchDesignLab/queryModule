@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  type ClientSiteConfig,
+  type ClientSiteConfigResponse,
   SiteConfigSchema,
   toClientSiteConfig,
 } from "@querymodule/core/config";
@@ -24,7 +24,12 @@ const site = SiteConfigSchema.parse(
     ),
   ),
 );
-const configOf = (n: number): ClientSiteConfig => toClientSiteConfig(site, hash(n));
+/** A fixed UUIDv7 per published version: `v` is the version, independent of the hash. */
+const versionIdOf = (v: number): string => `01890a5d-ac96-7000-8000-${String(v).padStart(12, "0")}`;
+const configOf = (n: number, v = n): ClientSiteConfigResponse => ({
+  ...toClientSiteConfig(site, hash(n)),
+  versionId: versionIdOf(v),
+});
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
@@ -38,7 +43,12 @@ interface Served {
   hashes: number[];
 }
 /** Serves GET /api/v1/config; `current` decides which config the server holds right now. */
-function serveConfig(state: { n: number; fail?: boolean; gate?: Promise<void> }): Served {
+function serveConfig(state: {
+  n: number;
+  v?: number;
+  fail?: boolean;
+  gate?: Promise<void>;
+}): Served {
   const served: Served = { backgrounds: [], hashes: [] };
   server.use(
     http.get(`${BASE}/api/v1/config`, async ({ request }) => {
@@ -46,7 +56,7 @@ function serveConfig(state: { n: number; fail?: boolean; gate?: Promise<void> })
       served.hashes.push(state.n);
       if (state.gate !== undefined) await state.gate;
       if (state.fail === true) return HttpResponse.error();
-      return HttpResponse.json(configOf(state.n));
+      return HttpResponse.json(configOf(state.n, state.v));
     }),
   );
   return served;
@@ -60,7 +70,7 @@ function setup(n = 1) {
   const refresh = createConfigRefresh({ api, queryClient, platform, intervalMs: 15_000 });
   return { platform, queryClient, refresh };
 }
-const cached = (qc: QueryClient) => qc.getQueryData<ClientSiteConfig>(["config"]);
+const cached = (qc: QueryClient) => qc.getQueryData<ClientSiteConfigResponse>(["config"]);
 
 describe("ADR-0011 item 3 live config refresh (#361)", () => {
   it("a same hash changes nothing: the cached object stays", async () => {
@@ -85,6 +95,19 @@ describe("ADR-0011 item 3 live config refresh (#361)", () => {
     expect(cached(queryClient)?.configHash).toBe(hash(1));
     await vi.advanceTimersByTimeAsync(1);
     expect(cached(queryClient)?.configHash).toBe(hash(2));
+    refresh.stop();
+  });
+
+  // #46 CFG-1, D-M2P3-5: a label-only publish keeps configHash (CFG-3) and changes versionId.
+  it("a new versionId with the same hash replaces the cached config", async () => {
+    const state = { n: 1, v: 1 };
+    serveConfig(state);
+    const { queryClient, refresh } = setup(1);
+    refresh.start();
+    state.v = 2;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(cached(queryClient)?.configHash).toBe(hash(1));
+    expect(cached(queryClient)?.versionId).toBe(versionIdOf(2));
     refresh.stop();
   });
 

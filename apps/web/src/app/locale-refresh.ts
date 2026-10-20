@@ -5,7 +5,9 @@ import { useServices } from "./services-context.js";
 
 /**
  * Fetches the locale bundle again when the cached config changes (a publish or a roll back), so a
- * label added in the builder reaches an open tab without a reload. The first config seen is the
+ * label added in the builder reaches an open tab without a reload. A change is a new configHash or
+ * a new published versionId: a label-only publish keeps the hash (#46 CFG-1, CFG-3). The bundle
+ * lives in the query cache only, never in storage (spec 6.7). The first config seen is the
  * baseline: the bundle loaded at boot is taken to match it (a publish while the sign-in page was
  * open is the one gap; a reload closes it). The baseline moves only once the new bundle is in, so a
  * failed or cancelled fetch is tried again on the next change, and a failure keeps the strings in use.
@@ -16,20 +18,21 @@ export function useLocaleRefresh(
   onBundle: (bundle: LocaleBundle) => void,
 ): void {
   const services = useServices();
-  const hash = useCachedConfig()?.configHash;
+  const config = useCachedConfig();
+  const configKey = config === undefined ? undefined : `${config.configHash}:${config.versionId}`;
   const seen = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!enabled || hash === undefined) return;
+    if (!enabled || configKey === undefined) return;
     if (seen.current === undefined) {
-      seen.current = hash;
+      seen.current = configKey;
       return;
     }
-    if (seen.current === hash) return;
+    if (seen.current === configKey) return;
     let live = true;
     fetchLocaleBundle(services.api, locale).then(
       (bundle) => {
         if (!live) return;
-        seen.current = hash;
+        seen.current = configKey;
         services.queryClient.setQueryData(["locale", locale], bundle);
         onBundle(bundle);
       },
@@ -38,5 +41,5 @@ export function useLocaleRefresh(
     return () => {
       live = false;
     };
-  }, [enabled, hash, locale, services, onBundle]);
+  }, [enabled, configKey, locale, services, onBundle]);
 }

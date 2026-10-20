@@ -176,10 +176,16 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
     throw new ConfigLoadError(label, "/siteConfig/site/id", "config.siteMismatch");
   if (published.documentHash === null)
     await backfillDocumentHash(db, published, document, config.configHash, label);
+  // #825 C-M5: siteConfig and mock only. The file carries no label overlay, so a published one
+  // alone is not the file ignored (config:import keeps it and reports unchanged).
+  const imageView = (doc: unknown) => {
+    const { siteConfig, mock } = doc as { siteConfig: unknown; mock?: unknown };
+    return canonicalJson({ siteConfig, mock: mock ?? null });
+  };
   const fileIgnored =
     !seeded &&
     (await bootstrapDocument(file, bootstrap).then(
-      (b) => canonicalJson(b.document) !== canonicalJson(document),
+      (b) => imageView(b.document) !== imageView(document),
       () => true,
     ));
   return { ...config, versionId: published.id, version: published.version, seeded, fileIgnored };
