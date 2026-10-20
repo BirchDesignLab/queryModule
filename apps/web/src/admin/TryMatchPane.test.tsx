@@ -376,6 +376,7 @@ describe("Try a match: the head note and the outcome row", () => {
     expect(
       await within(pane()).findByText(
         "State system has no Vehicle response. The coverage grid shows it as Missing or Not asked.",
+        { selector: "p.qm-preview__state" },
       ),
     ).toBeInTheDocument();
   });
