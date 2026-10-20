@@ -33,7 +33,8 @@ export class AddDemoUsersDomainError extends Error {
  * Thrown when a role grant fails after its account was created (#781). `created` keeps every
  * account made so far, with its derived password, for the CLI's stdout only; the message never
  * repeats a password (spec 5.9). A rerun skips the account (it exists), so the operator finishes
- * the grant by hand with scripts/ops/grant-role.ts.
+ * the grant by hand with `node scripts/ops/grant-role.js` (docs/demo.md#add-missing-demo-accounts).
+ * The grant error is kept as `cause`; the message names only its class and code (#782, #822 G-m1).
  */
 export class AddDemoUsersPartialFailureError extends Error {
   readonly created: { email: string; role: Role; password: string }[];
