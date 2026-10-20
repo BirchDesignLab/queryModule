@@ -128,6 +128,11 @@ export function createServices(options: ServicesOptions): Services {
   // config loads): a source that settled in between is refetched here (FR-065).
   feed.onFirstWelcome(() => results.refetchPending());
   feed.onRetry(() => results.refetchPending());
+  // Back online (spec 10.4): what settled while the page was offline is refetched now, not at the
+  // socket's next backoff step, which can be up to 30 s away.
+  options.platform.online.subscribe((online) => {
+    if (online) results.refetchPending();
+  });
   // Sign-in (Q1) loads the list: the last requests of the user's other sessions and devices. A session
   // still owing a password change loads nothing until it is changed (D-A26); a reset empties it all.
   const listable = (state: ReturnType<AuthStore["getState"]>): boolean =>
