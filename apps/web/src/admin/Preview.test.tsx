@@ -439,9 +439,10 @@ describe("preview type follows the tree (selectType, #427)", () => {
 });
 
 describe("previewConfig builds the draft the way production does (CFG-8, ADR-0011 item 4, spec 4.1)", () => {
-  // The builder edits the client-shaped view of the site (the live config without its hash).
+  // The builder edits the client-shaped view of the site (the live config without its hash and
+  // published versionId).
   const draft = (): JsonObject => {
-    const { configHash: _hash, ...view } = structuredClone(CLIENT_CONFIG);
+    const { configHash: _hash, versionId: _version, ...view } = structuredClone(CLIENT_CONFIG);
     return view as unknown as JsonObject;
   };
 

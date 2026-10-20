@@ -15,10 +15,14 @@ const defaultPath = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../../config/sites/default.json",
 );
-const CONFIG = toClientSiteConfig(
-  SiteConfigSchema.parse(JSON.parse(readFileSync(defaultPath, "utf8"))),
-  HASH,
-);
+const VERSION_ID = "01890a5d-ac96-774b-bcce-b302099a8057";
+const CONFIG = {
+  ...toClientSiteConfig(
+    SiteConfigSchema.parse(JSON.parse(readFileSync(defaultPath, "utf8"))),
+    HASH,
+  ),
+  versionId: VERSION_ID,
+};
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
@@ -55,15 +59,20 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     expect("futureThing" in got).toBe(false);
   });
 
-  // #46 CFG-1: the server now answers versionId; this client still parses the base view and
-  // tolerates the key (stripped) until Track B switches the fetch to the wire schema.
-  it("tolerates the versionId the server answers and strips it", async () => {
-    serve(() =>
-      HttpResponse.json({ ...CONFIG, versionId: "01890a5d-ac96-774b-bcce-b302099a8057" }),
-    );
+  // #46 CFG-1, D-M2P3-5: the wire schema carries the published versionId, so a label-only publish
+  // (same configHash) is seen by the client.
+  it("returns the versionId the server answers", async () => {
+    serve(() => HttpResponse.json(CONFIG));
     const got = await fetchClientConfig(makeApi());
-    expect(got).toEqual(CONFIG);
-    expect("versionId" in got).toBe(false);
+    expect(got.versionId).toBe(VERSION_ID);
+  });
+
+  it("a body without a versionId rejects with kind parse", async () => {
+    const { versionId: _v, ...base } = CONFIG;
+    serve(() => HttpResponse.json(base));
+    const err = await fetchClientConfig(makeApi()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigFetchError);
+    expect((err as ConfigFetchError).kind).toBe("parse");
   });
 
   it("strips an unknown feature key from a newer server", async () => {

@@ -1,4 +1,4 @@
-import { type ClientSiteConfig, ClientSiteConfigBaseSchema } from "@querymodule/core/config";
+import { type ClientSiteConfigResponse, ClientSiteConfigSchema } from "@querymodule/core/config";
 import type { ApiClient } from "../api/create-api-client.js";
 
 /** network: the request never completed; status: a non-2xx answer; parse: a 2xx body that is not the config. */
@@ -15,13 +15,13 @@ export class ConfigFetchError extends Error {
 }
 
 /**
- * GET /api/v1/config, parsed with the forward-tolerant base client schema (unknown keys are
- * stripped, including the versionId the server answers since #46 CFG-1; Track B reads it later).
+ * GET /api/v1/config, parsed with the forward-tolerant wire schema: unknown keys are stripped, and
+ * the published versionId is kept, so a label-only publish (same configHash) is seen (#46 CFG-1).
  */
 export async function fetchClientConfig(
   api: ApiClient,
   options: { background?: boolean } = {},
-): Promise<ClientSiteConfig> {
+): Promise<ClientSiteConfigResponse> {
   let status: number;
   let data: unknown;
   try {
@@ -41,9 +41,25 @@ export async function fetchClientConfig(
   if (data === undefined) {
     throw new ConfigFetchError("status", `config fetch failed: ${status}`);
   }
-  const parsed = ClientSiteConfigBaseSchema.safeParse(data);
+  const parsed = ClientSiteConfigSchema.safeParse(data);
   if (!parsed.success) throw new ConfigFetchError("parse", "config response invalid");
   return parsed.data;
+}
+
+/**
+ * Whether a fetched config should replace the cached one: none is cached, the hash differs (a
+ * siteConfig change), or the published versionId differs (a label-only publish keeps the hash,
+ * #46 CFG-1, CFG-3). The background refresh and the status page's check share it.
+ */
+export function configChanged(
+  current: ClientSiteConfigResponse | undefined,
+  next: ClientSiteConfigResponse,
+): boolean {
+  return (
+    current === undefined ||
+    current.configHash !== next.configHash ||
+    current.versionId !== next.versionId
+  );
 }
 
 /**
@@ -53,7 +69,7 @@ export async function fetchClientConfig(
  */
 export function clientConfigQuery(api: ApiClient): {
   queryKey: readonly ["config"];
-  queryFn: () => Promise<ClientSiteConfig>;
+  queryFn: () => Promise<ClientSiteConfigResponse>;
   staleTime: number;
 } {
   return {
