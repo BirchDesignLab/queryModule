@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Clock } from "../clock";
 import { withTransaction } from "../db/tx";
 import type { AppDeps } from "../deps";
@@ -12,9 +12,10 @@ import { takeBackup } from "./backup";
 /*
  * #821, ADR-0015: the one path that removes audit rows, and only by replacing the whole demo
  * database file after a backup. The triggers are never dropped: the old file goes whole and the
- * fresh one is migrated, which recreates them. Guards, in order, each refusing with fixed text and
- * nothing left behind: the mock gate (ALLOW_MOCK_SOURCES and a mock-only loaded site), --confirm
- * names the loaded site, the app does not answer its health route, and the database is not busy.
+ * fresh one is migrated, which recreates them. Guards, each refusing with fixed text and nothing
+ * left behind: ALLOW_MOCK_SOURCES, the app does not answer its health route (both before the
+ * database is opened), then a mock-only loaded site, --confirm names it, and the database is not
+ * busy.
  * Passwords go only to `out` (the command's stdout), as seed.ts prints them (spec 5.9).
  */
 
@@ -93,21 +94,14 @@ function mockOnly(d: AppDeps): boolean {
   return c.mock !== null && sources.length > 0 && sources.every((s) => s.kind === "mock");
 }
 
-/** Guards 1 (site half) to 4 on the open database; throws Refused. */
-async function guard(d: AppDeps, site: string, healthUrl: string): Promise<void> {
+/** Guards 1 (site half), 2 and 4 on the open database; throws Refused. */
+async function guard(d: AppDeps, site: string): Promise<void> {
   if (!mockOnly(d))
     throw new Refused(
       "the loaded site has a source that is not mock; db-reset runs on a mock-only demo site only (ADR-0015)",
     );
   if (d.config.current().siteConfig.site.id !== site)
     throw new Refused("--confirm does not name the loaded site");
-  const probe = await probeApp(healthUrl);
-  if (probe === "running")
-    throw new Refused("the app answers its health check; stop it first: docker compose stop app");
-  if (probe === "unknown")
-    throw new Refused(
-      "could not check whether the app is running; stop it with docker compose stop app and retry",
-    );
   // BEGIN IMMEDIATE through the client's own path; in WAL mode IMMEDIATE and EXCLUSIVE take the
   // same write lock. A writer holding it outlasts busy_timeout and this throws SQLITE_BUSY.
   try {
@@ -147,6 +141,16 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
       "ALLOW_MOCK_SOURCES is not true; db-reset runs on a mock-only demo site only (ADR-0015)",
     );
   if (!existsSync(o.env.dbFile)) return refuse("there is no database to reset");
+  // Guard 3 before the database is opened (CW3 review Q3): opening runs the start sequence
+  // (migrations, config store seed, draft cleanup), which can write, so a live app's database is
+  // never opened.
+  const probe = await probeApp(o.healthUrl);
+  if (probe === "running")
+    return refuse("the app answers its health check; stop it first: docker compose stop app");
+  if (probe === "unknown")
+    return refuse(
+      "could not check whether the app is running; stop it with docker compose stop app and retry",
+    );
 
   let secret: string;
   let backupFile: string;
@@ -162,7 +166,7 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
     );
   }
   try {
-    await guard(old, args.site, o.healthUrl);
+    await guard(old, args.site);
     try {
       secret = await o.seedSecret();
     } catch {
@@ -177,7 +181,7 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
       o.err(`db-reset: backup failed; nothing was deleted (${errorText(e)})\n`);
       return 1;
     }
-    backupFile = join(dir, "querymodule.db");
+    backupFile = join(dir, basename(o.env.dbFile));
     o.out(
       `backup written: ${backupFile} (manifest ${join(dir, "manifest.json")}: audit rows ${m.auditCount}, max id ${m.auditMaxId})\n`,
     );

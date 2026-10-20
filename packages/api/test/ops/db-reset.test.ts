@@ -224,15 +224,73 @@ describe("#821 db:reset guards (ADR-0015)", () => {
     expect(await s.snapshot()).toEqual(before);
   });
 
-  it("refuses while the app answers its health check, naming docker compose stop app", async () => {
+  it("refuses while the app answers its health check, before opening the database", async () => {
     const s = await seededSite();
     const before = await s.snapshot();
+    // CW3 review Q3: opening runs the start sequence, which can write; a live app's database is
+    // never opened.
+    const open = vi.fn(s.open);
     const code = await runDbReset(
       ["--confirm", "default"],
-      await s.opts({ healthUrl: await healthServer() }),
+      await s.opts({ open, healthUrl: await healthServer() }),
     );
     expect(code).toBe(1);
     expect(s.err.join("")).toContain("docker compose stop app");
+    expect(open).not.toHaveBeenCalled();
+    expect(await s.snapshot()).toEqual(before);
+  });
+
+  it("refuses a site whose loaded config has no mock file", async () => {
+    const s = await seededSite();
+    const before = await s.snapshot();
+    const open = async () => {
+      const d = await s.open();
+      d.config.swap({ ...d.config.current(), mock: null });
+      return d;
+    };
+    const code = await runDbReset(["--confirm", "default"], await s.opts({ open }));
+    expect(code).toBe(1);
+    expect(s.err.join("")).toContain("not mock");
+    expect(await s.snapshot()).toEqual(before);
+  });
+
+  it("refuses when a writer takes the lock after the database opened (guard 4)", {
+    timeout: 30_000,
+  }, async () => {
+    const s = await seededSite();
+    const before = await s.snapshot();
+    const other = await openDatabase({ file: s.env.dbFile, encryptionKey: TEST_DB_KEY });
+    onTestFinished(() => {
+      if (!other.$client.closed) other.$client.close();
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let held: Promise<void> = Promise.resolve();
+    const open = async () => {
+      const d = await s.open();
+      let locked: () => void = () => {};
+      const isLocked = new Promise<void>((r) => {
+        locked = r;
+      });
+      held = withTransaction(other, async () => {
+        locked();
+        await gate;
+      });
+      await isLocked;
+      return d;
+    };
+    let code: number;
+    try {
+      code = await runDbReset(["--confirm", "default"], await s.opts({ open }));
+    } finally {
+      release();
+      await held;
+      other.$client.close();
+    }
+    expect(code).toBe(1);
+    expect(s.err.join("")).toContain("the database is busy (");
     expect(await s.snapshot()).toEqual(before);
   });
 
