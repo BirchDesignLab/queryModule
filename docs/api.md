@@ -119,7 +119,9 @@ The auth routes are under `/api/v1/auth/` and are not part of `openapi.json`. Th
 uses are `POST /auth/sign-in/email`, `POST /auth/sign-out`, `GET /auth/get-session` and
 `POST /auth/change-password`. Sign-out and change-password need `X-Requested-With: querymodule`.
 Sign-in is rate limited per account and per client address (see the demo runbook, "If something goes
-wrong"). Authentication is by session cookie; there are no tokens in query strings.
+wrong"). Change-password also counts wrong `currentPassword` values per user: after 5 in 15 minutes it
+answers `429 rateLimited` with `Retry-After` until the window passes. Sign-in is not affected, and a
+success clears the count. Authentication is by session cookie; there are no tokens in query strings.
 
 ### Submitting a query
 
