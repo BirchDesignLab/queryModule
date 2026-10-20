@@ -288,6 +288,23 @@ describe("G11 a request that starts sending scrolls the list into view when it i
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps bringing the list into view across commits while focus stays on body (#645)", () => {
+    const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
+    const { rerender } = render(<RequestList {...props} rows={[ACKED]} revealOnSend />);
+    // A tap that focuses nothing (Safari, iOS): focus is on body when the request starts sending.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    rerender(<RequestList {...props} rows={[SENDING, ACKED]} revealOnSend />);
+    rerender(
+      <RequestList
+        {...props}
+        rows={[{ ...SENDING, status: "acknowledged" as const }, ACKED]}
+        revealOnSend
+      />,
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
   it("does not resume when focus comes back to the sending control between two commits (#645)", () => {
     const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
     const tree = (rows: RequestRowView[]) => (

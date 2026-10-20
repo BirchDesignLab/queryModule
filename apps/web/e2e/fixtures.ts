@@ -100,6 +100,6 @@ export async function expectNoSeriousAxeViolations(page: Page): Promise<void> {
       .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
     expect(serious).toEqual([]);
   } finally {
-    await page.emulateMedia({ reducedMotion: reducedBefore ? "reduce" : null });
+    await page.emulateMedia({ reducedMotion: reducedBefore ? "reduce" : "no-preference" });
   }
 }

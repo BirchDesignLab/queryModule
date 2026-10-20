@@ -210,6 +210,8 @@ export function RequestList({
       revealFocus.current = document.activeElement;
     }
     if (Date.now() >= revealUntil.current) return;
+    // Known edge: if the sending control left the DOM, focus falls to body with no focusin and the
+    // reveal ends early. No path does that today (submit uses aria-disabled and stays focusable).
     if (document.activeElement !== revealFocus.current) {
       revealUntil.current = 0;
       return;
