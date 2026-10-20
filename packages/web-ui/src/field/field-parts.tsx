@@ -19,11 +19,15 @@ export function fieldIds(
   tag: ReactNode,
   description: string | undefined,
   error: string | undefined,
+  /** Ids of hints outside the field (one hint shared by two fields), read after its own. */
+  extra?: string | undefined,
 ): FieldIds {
   const tagId = hasTag(tag) ? `${id}-tag` : undefined;
   const descriptionId = description === undefined ? undefined : `${id}-description`;
   const errorId = error === undefined ? undefined : `${id}-error`;
-  const describedBy = [tagId, descriptionId, errorId].filter((x) => x !== undefined).join(" ");
+  const describedBy = [tagId, descriptionId, extra, errorId]
+    .filter((x) => x !== undefined)
+    .join(" ");
   return {
     tagId,
     descriptionId,

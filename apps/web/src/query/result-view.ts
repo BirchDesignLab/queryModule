@@ -3,6 +3,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import { type Assessment, SEVERITY_RANK } from "@querymodule/core/contracts";
 import { assessResult } from "@querymodule/core/response";
 import { evaluateForm } from "@querymodule/core/rules";
+import type { SourceLineIcon } from "@querymodule/web-ui";
 import { type HighestSeverity, STATUS_ORDER } from "./announce-status.js";
 
 type Acknowledged = Extract<RequestEntry, { status: "acknowledged" }>;
@@ -123,6 +124,13 @@ export function midSentence(label: string): string {
 }
 
 /** The reason a source did not return, in words; undefined for pending and returned (G5). */
+/** The line icon where it differs from the tone's (mockup v6): a clock for timed out, a dash for interrupted. */
+export function sourceIcon(status: string): SourceLineIcon | undefined {
+  if (status === "timedOut") return "clock";
+  if (status === "interrupted") return "dash";
+  return undefined;
+}
+
 export function sourceWhy(
   status: string,
   config: ClientSiteConfig,

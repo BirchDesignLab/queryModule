@@ -102,10 +102,9 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
 
   it("lists the commands the site defines in a reference under the input", async () => {
     await openPanel({ wide: true, terminal: "pane" });
-    expect(within(pane()).getByRole("heading", { name: "Commands" })).toBeVisible();
-    const list = within(pane()).getByRole("list", { name: "Commands" });
-    expect(within(list).getAllByRole("listitem").length).toBeGreaterThan(0);
-    expect(within(list).getAllByText(/^VEH\./)[0]).toBeVisible();
+    const table = within(pane()).getByRole("table", { name: "Commands" });
+    expect(within(table).getAllByRole("row").length).toBeGreaterThan(1);
+    expect(within(table).getAllByText(/^VEH/)[0]).toBeVisible();
   });
 
   it("says it is beside the results and that the command has no problems, until it has some", async () => {
@@ -301,7 +300,7 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
     const { user } = await openPanel({ wide: true, terminal: "pane" });
     const region = within(pane()).getByRole("region", { name: "Command reference" });
     expect(region).toHaveAttribute("tabindex", "0");
-    expect(within(region).getByRole("list", { name: "Commands" })).toBeVisible();
+    expect(within(region).getByRole("table", { name: "Commands" })).toBeVisible();
     // Tab from the command input reaches it (the pane's next stop).
     await user.click(command());
     await user.tab();
@@ -374,5 +373,38 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
     await user.type(plate(), "ZZ-0011");
     expect(JSON.stringify({ ...localStorage })).not.toContain("ZZ-0011");
     expect(JSON.stringify({ ...sessionStorage })).not.toContain("ZZ-0011");
+  });
+});
+
+describe("#835 the pane frame (mockup v6 tpane)", () => {
+  it("has no visible page title above the columns; the heading stays for the outline", async () => {
+    await openPanel({ wide: true, terminal: "pane" });
+    const title = screen.getByRole("heading", { level: 1, name: "Query Module" });
+    expect(title.style.clipPath).toBe("inset(50%)");
+    expect(title).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("keeps the page title visible in the toggle layout", async () => {
+    await openPanel({ wide: true, terminal: "toggle" });
+    expect(screen.getByRole("heading", { level: 1, name: "Query Module" }).style.clipPath).toBe("");
+  });
+
+  it("the reference is a table of commands and their positions, one row per query type", async () => {
+    await openPanel({ wide: true, terminal: "pane" });
+    const table = within(pane()).getByRole("table", { name: "Commands" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    const veh = rows.find((r) => within(r).getByRole("rowheader").textContent?.startsWith("VEH"));
+    expect(veh).toBeDefined();
+    // Positions only, joined by the delimiter: the code is in the row header.
+    expect(within(veh as HTMLElement).getByRole("cell")).toHaveTextContent(/^\.Plate\./);
+    // The type the row runs is read with its codes.
+    expect(within(veh as HTMLElement).getByRole("rowheader")).toHaveTextContent(/Vehicle/);
+  });
+
+  it("shows the Command label as a caption with a > prompt", async () => {
+    await openPanel({ wide: true, terminal: "pane" });
+    expect(pane().querySelector(`label[for="${command().id}"]`)).toHaveClass("qm-caption");
+    expect(pane().querySelector(".qm-terminal__prompt")).toHaveTextContent(">");
   });
 });

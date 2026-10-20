@@ -7,8 +7,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { LineIcon } from "../icons.js";
 import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
-import { SourceLine, type SourceLineTone } from "./SourceLine.js";
+import { SourceLine, type SourceLineIcon, type SourceLineTone } from "./SourceLine.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
@@ -23,6 +24,10 @@ export interface SourceLineView {
   text: string;
   /** Why the source did not return, in words ("no answer in 10 s"); absent when it did or is pending. */
   why?: string;
+  /** The source's name, set in bold where the text leads with it (mockup v6 .src-line). */
+  source?: string;
+  /** An icon other than the tone's: a clock for timed out, a dash for interrupted. */
+  icon?: SourceLineIcon;
   /**
    * The source's result card, once its payload is here. It stands in for the status line (its own
    * heading says "Source: returned"); the key stays, so the line becoming a card is one swap.
@@ -478,7 +483,7 @@ export function RequestList({
                         {part.skippedText === undefined ? null : (
                           <span className="qm-source qm-source--skipped">
                             <span aria-hidden="true" className="qm-source__icon">
-                              –
+                              <LineIcon name="skip" />
                             </span>
                             <span>{part.skippedText}</span>
                           </span>
@@ -492,6 +497,8 @@ export function RequestList({
                                   tone={line.tone}
                                   text={line.text}
                                   why={line.why}
+                                  source={line.source}
+                                  icon={line.icon}
                                 />
                               ) : (
                                 <div key={line.key} className="qm-request__card">

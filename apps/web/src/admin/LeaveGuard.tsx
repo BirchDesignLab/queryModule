@@ -158,7 +158,8 @@ export function LeaveDialog({
         <button
           ref={stayRef}
           type="button"
-          className={leavePrimary ? "qm-button qm-button--secondary" : "qm-button"}
+          // Beside a main action the way out is a ghost button (mockup v6 publish dialog).
+          className={leavePrimary ? "qm-button qm-button--ghost" : "qm-button"}
           aria-disabled={busy ? "true" : undefined}
           aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
           onClick={busy ? undefined : onStay}

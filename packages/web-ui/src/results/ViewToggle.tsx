@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { LineIcon } from "../icons.js";
 import { VisuallyHidden } from "../visually-hidden.js";
 
 export interface ViewToggleProps {
@@ -31,6 +32,7 @@ export function ViewToggle({
       aria-controls={controlsId}
       onClick={onToggle}
     >
+      <LineIcon name="chevron" />
       <span>{label}</span> <span className="qm-view-toggle__count">{countText}</span>
       {context === undefined ? null : (
         <>

@@ -103,6 +103,8 @@ export function BehaviorLine({
   return (
     <SourceLine
       tone="problem"
+      source={source}
+      {...(status === "timedOut" ? { icon: "clock" as const } : {})}
       text={translator.t("sourceStatus.line", {
         source,
         status: translator.t(`sourceStatus.status.${status}`),

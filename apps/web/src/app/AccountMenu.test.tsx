@@ -186,3 +186,14 @@ describe("UX-014 the terminal layout control under Theme (FR-050, spec 6.2)", ()
     expect(within(panel).queryByRole("alert")).toBeNull();
   });
 });
+
+describe("#835 the THEME caption (mockup v6 account menu)", () => {
+  it("names the theme choice with a visible caption; Keyboard shortcuts stays", async () => {
+    const user = userEvent.setup();
+    render(menu({ onShowShortcuts: vi.fn() }));
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    const group = screen.getByRole("group", { name: "Theme" });
+    expect(group.querySelector("legend")).toHaveClass("qm-caption");
+    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+  });
+});

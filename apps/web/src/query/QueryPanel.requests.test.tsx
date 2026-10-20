@@ -7,6 +7,7 @@ import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
 import { ACK_202, API, server, submitRecorder, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
+import { lineText } from "../test/source-line-text.js";
 
 function renderPanel(persona: string | null = null) {
   const services = testServices();
@@ -193,7 +194,7 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const row = await screen.findByRole("listitem");
     await waitFor(() => expect(row).toHaveTextContent("Acknowledged"));
-    expect(within(row).getAllByText("State system: pending")).toHaveLength(2);
+    expect(within(row).getAllByText(lineText("State system: pending"))).toHaveLength(2);
   });
 
   it("Copy reference copies the full ID, names its row, and announces once", async () => {

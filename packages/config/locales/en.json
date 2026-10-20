@@ -283,6 +283,8 @@
   "terminalPane.title": "Terminal",
   "terminalPane.referenceTitle": "Commands",
   "terminalPane.referenceRegion": "Command reference",
+  "terminalPane.referenceCommand": "Command",
+  "terminalPane.referencePositions": "Positions",
   "terminalPane.unknownCommandAnnouncement": "Unrecognized command",
   "terminalPane.hint": "Terminal is beside the results.",
   "terminalPane.noProblems": "No problems.",

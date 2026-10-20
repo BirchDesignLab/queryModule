@@ -19,6 +19,8 @@ export interface TerminalInputProps {
   /** Source checkboxes and Submit, as in QueryForm. */
   children?: ReactNode;
   inputRef?: Ref<HTMLInputElement>;
+  /** The pane's look (mockup v6): the label as a caption and a decorative ">" before the input. */
+  prompt?: boolean;
 }
 
 /** Terminal command line (FR-055, FR-056, spec 6.2 "Terminal errors"): text and focus survive a submit. */
@@ -34,6 +36,7 @@ export function TerminalInput({
   errorsLabel,
   children,
   inputRef,
+  prompt = false,
 }: TerminalInputProps): JSX.Element {
   const base = useId();
   const descriptionId = `${base}-description`;
@@ -47,6 +50,22 @@ export function TerminalInput({
   ]
     .filter((part): part is string => part !== null)
     .join(" ");
+  const input = (
+    <input
+      ref={inputRef}
+      id={id}
+      name={id}
+      type="text"
+      className="qm-field__input qm-terminal__input"
+      autoComplete="off"
+      spellCheck={false}
+      autoCapitalize="off"
+      value={value}
+      aria-invalid={hasErrors ? "true" : undefined}
+      aria-describedby={describedBy}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  );
   return (
     <form
       noValidate
@@ -59,23 +78,19 @@ export function TerminalInput({
       }}
     >
       <div className="qm-field">
-        <label htmlFor={id} className="qm-field__label">
+        <label htmlFor={id} className={prompt ? "qm-field__label qm-caption" : "qm-field__label"}>
           {label}
         </label>
-        <input
-          ref={inputRef}
-          id={id}
-          name={id}
-          type="text"
-          className="qm-field__input qm-terminal__input"
-          autoComplete="off"
-          spellCheck={false}
-          autoCapitalize="off"
-          value={value}
-          aria-invalid={hasErrors ? "true" : undefined}
-          aria-describedby={describedBy}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
+        {prompt ? (
+          <div className="qm-terminal__line">
+            <span aria-hidden="true" className="qm-terminal__prompt">
+              {">"}
+            </span>
+            {input}
+          </div>
+        ) : (
+          input
+        )}
         <p id={descriptionId} className="qm-field__description">
           {description}
         </p>

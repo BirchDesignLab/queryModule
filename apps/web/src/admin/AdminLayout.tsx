@@ -1,5 +1,5 @@
 import { useStore } from "@querymodule/client";
-import { visuallyHiddenStyle } from "@querymodule/web-ui";
+import { LineIcon, visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useEffect, useId, useRef } from "react";
 import { Link, Navigate, NavLink, useMatch, useOutlet } from "react-router";
 import { useCachedConfig } from "../app/cached-config.js";
@@ -61,6 +61,7 @@ function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; bac
     <nav className="qm-admin__rail" aria-label={t("admin.navLabel")}>
       {back && (
         <Link className="qm-admin__back" to="/">
+          <LineIcon name="back" />
           {t("admin.nav.back")}
         </Link>
       )}
@@ -70,7 +71,10 @@ function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; bac
         </p>
         <ul aria-labelledby={`${uid}-configure`}>
           <li>
-            <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
+            <NavLink to="/admin/config">
+              <LineIcon name="sliders" />
+              {t("admin.nav.config")}
+            </NavLink>
           </li>
         </ul>
       </div>
@@ -81,7 +85,10 @@ function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; bac
           </p>
           <ul aria-labelledby={`${uid}-people`}>
             <li>
-              <NavLink to="/admin/users">{t("admin.nav.users")}</NavLink>
+              <NavLink to="/admin/users">
+                <LineIcon name="users" />
+                {t("admin.nav.users")}
+              </NavLink>
             </li>
           </ul>
         </div>
@@ -95,10 +102,14 @@ function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; bac
             <li>
               {onRequest ? (
                 <Link to="/admin/audit" aria-current="true">
+                  <LineIcon name="log" />
                   {t("admin.nav.audit")}
                 </Link>
               ) : (
-                <NavLink to="/admin/audit">{t("admin.nav.audit")}</NavLink>
+                <NavLink to="/admin/audit">
+                  <LineIcon name="log" />
+                  {t("admin.nav.audit")}
+                </NavLink>
               )}
             </li>
           </ul>

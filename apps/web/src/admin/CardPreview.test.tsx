@@ -11,6 +11,7 @@ import {
 } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+import { lineText } from "../test/source-line-text.js";
 import { configDraftStore } from "./ConfigBuilder.js";
 import type { JsonObject } from "./draft.js";
 
@@ -91,7 +92,7 @@ describe("the card preview", () => {
     const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
     await typeValues(t, "FAIL1");
-    expect(await within(pane()).findByText("State system: failed")).toBeInTheDocument();
+    expect(await within(pane()).findByText(lineText("State system: failed"))).toBeInTheDocument();
     expect(within(pane()).queryByRole("region", { name: /returned/ })).toBeNull();
   });
 

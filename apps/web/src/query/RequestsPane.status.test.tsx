@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ACK_CORRELATION_ID, FeedDriver } from "../test/feed-driver.js";
 import { CLIENT_CONFIG, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
+import { lineText } from "../test/source-line-text.js";
 import { RequestsPane } from "./RequestsPane.js";
 
 const ACK: SubmitQueryResponse = {
@@ -62,8 +63,8 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
   it("after an acknowledgment each source line reads pending, in words", () => {
     setup();
     const list = sourceList();
-    expect(within(list).getByText("State system: pending")).toBeInTheDocument();
-    expect(within(list).getByText("National system: pending")).toBeInTheDocument();
+    expect(within(list).getByText(lineText("State system: pending"))).toBeInTheDocument();
+    expect(within(list).getByText(lineText("National system: pending"))).toBeInTheDocument();
   });
 
   it("an event turns one line into its new status in place while focus and the typed value stay", async () => {
@@ -71,12 +72,18 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     services.feed.open();
     await user.click(screen.getByLabelText("Plate"));
     await user.keyboard("ABC");
-    const line = within(sourceList()).getByText("State system: pending").closest(".qm-source");
+    const line = within(sourceList())
+      .getByText(lineText("State system: pending"))
+      .closest(".qm-source");
     const row = line?.closest("li.qm-request");
     act(() => driver.status("stateSource", "failed"));
-    const after = within(sourceList()).getByText("State system: failed").closest(".qm-source");
+    const after = within(sourceList())
+      .getByText(lineText("State system: failed"))
+      .closest(".qm-source");
     expect(after).toBe(line);
-    expect(within(sourceList()).getByText("National system: pending")).toBeInTheDocument();
+    expect(
+      within(sourceList()).getByText(lineText("National system: pending")),
+    ).toBeInTheDocument();
     expect(after?.closest("li.qm-request")).toBe(row);
     expect(screen.getByLabelText("Plate")).toHaveFocus();
     expect(screen.getByLabelText("Plate")).toHaveValue("ABC");
@@ -88,7 +95,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     services.feed.open();
     act(() => driver.status("stateSource", "returned"));
     const list = sourceList();
-    expect(within(list).getByText("State system: loading result")).toBeInTheDocument();
+    expect(within(list).getByText(lineText("State system: loading result"))).toBeInTheDocument();
     expect(within(list).queryByText("State system: returned")).not.toBeInTheDocument();
     services.feed.close();
   });
@@ -109,7 +116,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     services.feed.open();
     act(() => driver.status("stateSource", "someLaterStatus"));
     const list = sourceList();
-    const line = within(list).getByText("State system: unknown").closest(".qm-source");
+    const line = within(list).getByText(lineText("State system: unknown")).closest(".qm-source");
     expect(line).toHaveClass("qm-source--unknown");
     expect(
       within(list).getByText("this version of the app does not know this status"),
@@ -125,7 +132,9 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     await user.click(copy);
     copy.focus();
     act(() => driver.status("nationalSource", "timedOut"));
-    expect(within(sourceList()).getByText("National system: timed out")).toBeInTheDocument();
+    expect(
+      within(sourceList()).getByText(lineText("National system: timed out")),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Copy reference/ })).toBe(copy);
     expect(copy).toHaveFocus();
     services.feed.close();
@@ -160,7 +169,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     });
     expect(screen.getByText("Wanted check, also run from Vehicle")).toBeInTheDocument();
     expect(screen.getByText("Property not run: needs dob.")).toBeInTheDocument();
-    expect(within(sourceList()).getAllByText("National system: pending")).toHaveLength(2);
+    expect(within(sourceList()).getAllByText(lineText("National system: pending"))).toHaveLength(2);
   });
 
   it("#587 a plate-only request shows the dropped source as its own line, in words", () => {
@@ -171,14 +180,16 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
       ],
     } as SubmitQueryResponse);
     const list = sourceList();
-    expect(within(list).getByText("State system: pending")).toBeInTheDocument();
-    expect(within(list).getByText("National system: not run (plate only)")).toBeInTheDocument();
+    expect(within(list).getByText(lineText("State system: pending"))).toBeInTheDocument();
+    expect(
+      within(list).getByText(lineText("National system: not run (plate only)")),
+    ).toBeInTheDocument();
   });
 
   it("#576 a configured source shows its label, never its raw id", () => {
     setup();
     expect(screen.queryByText(/stateSource|nationalSource/)).toBeNull();
-    expect(within(sourceList()).getByText("State system: pending")).toBeInTheDocument();
+    expect(within(sourceList()).getByText(lineText("State system: pending"))).toBeInTheDocument();
   });
 
   it("#576 a source the config does not list shows its id only as a last resort", () => {
@@ -186,9 +197,9 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
       ...ACK,
       parts: [{ ...ACK.parts[0], sourceIds: ["stateSource", "mysterySource"] }],
     } as SubmitQueryResponse);
-    expect(within(sourceList()).getByText("State system: pending")).toBeInTheDocument();
+    expect(within(sourceList()).getByText(lineText("State system: pending"))).toBeInTheDocument();
     expect(
-      within(sourceList()).getByText("Unlisted source mysterySource: pending"),
+      within(sourceList()).getByText(lineText("Unlisted source mysterySource: pending")),
     ).toBeInTheDocument();
   });
 
@@ -279,7 +290,9 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
       ],
     } as SubmitQueryResponse);
     expect(
-      within(sourceList()).getByText("Unlisted source unlabelledSource: not run (plate only)"),
+      within(sourceList()).getByText(
+        lineText("Unlisted source unlabelledSource: not run (plate only)"),
+      ),
     ).toBeInTheDocument();
   });
 

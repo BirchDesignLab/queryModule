@@ -21,6 +21,7 @@ import { useServices } from "../app/services-context.js";
 import {
   highestSeverity,
   purgedValuesSummary,
+  sourceIcon,
   sourcesDoneLine,
   sourceWhy,
 } from "../query/result-view.js";
@@ -153,6 +154,10 @@ function adminRow(
                     ? "ok"
                     : "problem",
               ...(why === undefined ? {} : { why }),
+              source: sourceLabel(source.sourceId),
+              ...(sourceIcon(source.status) === undefined
+                ? {}
+                : { icon: sourceIcon(source.status) }),
               text: t("sourceStatus.line", {
                 source: sourceLabel(source.sourceId),
                 status: t(`sourceStatus.status.${source.status}`),
@@ -203,6 +208,7 @@ function adminRow(
             (sourceId): SourceLineView => ({
               key: `${key}:${sourceId}:notRun`,
               tone: "notRun",
+              source: sourceLabel(sourceId),
               text: t("sourceStatus.notRun", { source: sourceLabel(sourceId) }),
             }),
           ),

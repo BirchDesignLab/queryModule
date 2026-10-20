@@ -528,3 +528,26 @@ describe("regulated data (spec 6.7)", () => {
     expect(auditStore(t.services).getState().form).toBeNull();
   });
 });
+
+describe("#835 the filter band and the rail (mockup v6 audit frame)", () => {
+  it("one window hint beside To describes both From and To", async () => {
+    await openAudit();
+    const from = await screen.findByLabelText("From", undefined, MAX_WAIT);
+    const to = screen.getByLabelText("To");
+    const hint = /^Times are local, MM-DD-YY HH:mm\./;
+    expect(from).toHaveAccessibleDescription(hint);
+    expect(to).toHaveAccessibleDescription(hint);
+    expect(screen.getAllByText(hint)).toHaveLength(1);
+    expect(screen.getByText(hint).closest(".qm-field")).toBeNull();
+  });
+
+  it("the rail draws a line icon on each item and a chevron on the way back", async () => {
+    await openAudit();
+    await screen.findByLabelText("From", undefined, MAX_WAIT);
+    const icon = (name: string) =>
+      within(rail()).getByRole("link", { name }).querySelector("svg")?.getAttribute("data-icon");
+    expect(icon("Back to queries")).toBe("back");
+    expect(icon("Site configuration")).toBe("sliders");
+    expect(icon("Audit log")).toBe("log");
+  });
+});

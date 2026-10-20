@@ -255,6 +255,29 @@ h1 {
   font-weight: 600;
 }
 
+/* A small-caps caption over a control (mockup v6 .eyebrow: "THEME", "COMMAND"). */
+.qm-caption {
+  padding: 0;
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* A segmented control with a visible caption: the caption above, the track below. */
+.qm-seg-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qm-space-1);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 /* Icon-only segments (the officer bar's theme choice): 48 px squares, spec 6.3. */
 .qm-seg--icons > button {
   display: inline-flex;
@@ -867,8 +890,13 @@ h1 {
 }
 
 .qm-source__icon {
-  inline-size: 1.25em;
-  text-align: center;
+  display: inline-flex;
+  align-self: center;
+}
+
+/* Mockup v6 .src-line: the source name stands out from its status. */
+.qm-source__name {
+  font-weight: 600;
 }
 
 .qm-source--pending,
@@ -896,6 +924,45 @@ h1 {
 }
 
 /* Terminal mode (FR-050, FR-055, spec 6.2) */
+/* The pane's command line (mockup v6 .term-input): a ">" prompt chip inside the input's frame. */
+.qm-terminal__line {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  padding-inline-start: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-sunken);
+}
+
+.qm-terminal__line:focus-within {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-terminal__line:has(.qm-terminal__input[aria-invalid="true"]) {
+  border-color: var(--qm-field-required);
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
+}
+
+.qm-terminal__prompt {
+  color: var(--qm-color-accent);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-terminal__line > .qm-terminal__input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.qm-terminal__line > .qm-terminal__input:focus,
+.qm-terminal__line > .qm-terminal__input:focus-visible {
+  outline: none;
+}
+
 .qm-terminal__errors {
   margin: 0;
   padding-inline-start: var(--qm-space-4);
@@ -1543,6 +1610,10 @@ h1 {
 }
 
 .qm-view-toggle {
+  /* A chevron before the words (mockup v6 .rc-tog). */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-1);
   justify-self: start;
 }
 
@@ -1692,6 +1763,15 @@ h1 {
 
 .qm-button > .qm-line-icon--trailing {
   margin-inline: var(--qm-space-2) 0;
+}
+
+/* The chevron turns over when the detail is open (mockup v6 .rc-tog). */
+.qm-view-toggle > .qm-line-icon {
+  margin-inline-end: var(--qm-space-1);
+}
+
+.qm-view-toggle[aria-expanded="true"] > .qm-line-icon {
+  transform: rotate(180deg);
 }
 
 /* A link drawn as a button keeps the button's box: no underline, the text on its middle. */

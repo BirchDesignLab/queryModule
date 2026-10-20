@@ -371,6 +371,8 @@ main[tabindex="-1"]:focus {
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  /* Mockup v6: a line icon before each item's words. */
+  gap: var(--qm-space-2);
   width: 100%;
   min-height: var(--qm-control-height-dense);
   padding: 0 var(--qm-space-3);
@@ -1661,11 +1663,16 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-body-size);
 }
 
-/* Leave the builder? (B1): a small modal over a dimmed page; the choices sit at the end. */
+/* Leave the builder? (B1): a small modal over a dimmed page; the choices sit at the end. Mockup v6:
+   560 px, the title in a header and the choices in a footer, each set off by a divider. Every
+   dialog drawn on this frame (publish, roll back, leave, the user dialogs) shares it. */
 .qm-leave-dialog {
   box-sizing: border-box;
-  inline-size: min(calc(var(--qm-space-12) * 10), calc(100vw - var(--qm-space-8)));
-  padding: var(--qm-space-5);
+  inline-size: min(
+    calc(var(--qm-space-12) * 10 + var(--qm-space-5) * 4),
+    calc(100vw - var(--qm-space-8))
+  );
+  padding: 0 var(--qm-space-5);
   border: var(--qm-border-width) solid var(--qm-color-border);
   border-radius: var(--qm-radius-panel);
   background: var(--qm-color-surface-overlay);
@@ -1678,20 +1685,26 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-leave-dialog h2 {
-  margin: 0 0 var(--qm-space-3);
+  margin: 0 calc(-1 * var(--qm-space-5)) var(--qm-space-4);
+  padding: var(--qm-space-4) var(--qm-space-5);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
   font-size: var(--qm-type-size-xl);
   font-weight: 600;
 }
 
 .qm-leave-dialog p {
-  margin: 0 0 var(--qm-space-5);
+  margin: 0 0 var(--qm-space-4);
 }
 
 /* The publish dialog's list of changes scrolls inside the dialog, never the page behind it. */
 .qm-leave-dialog__content {
   max-block-size: 50vh;
-  margin-block-end: var(--qm-space-5);
+  margin-block-end: var(--qm-space-4);
   overflow-y: auto;
+}
+
+.qm-leave-dialog .qm-leave-dialog__caption {
+  margin-block-end: var(--qm-space-2);
 }
 
 .qm-leave-dialog__actions {
@@ -1699,6 +1712,18 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--qm-space-2);
+  /* The part above it ends with its own margin. */
+  margin: 0 calc(-1 * var(--qm-space-5));
+  padding: var(--qm-space-4) var(--qm-space-5);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+/* What changes (mockup v6): a short bulleted list, one line per change. */
+.qm-diff__bullets {
+  display: grid;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding-inline-start: var(--qm-space-5);
 }
 
 /* Changes (item 4): the draft against the live config. Entries are rows that open their item, so
@@ -1708,11 +1733,6 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0 0 var(--qm-space-3);
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
-}
-
-/* In the review dialog the "Changes from the live version" heading is a section, not a second title. */
-.qm-leave-dialog__content .qm-editor__title {
-  font-size: var(--qm-type-size-lg);
 }
 
 .qm-diff__group {
@@ -2015,11 +2035,21 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-3);
 }
 
+/* Mockup v6: the title sits in a white strip across the section, and the filters in a white band
+   under it; the results below are on the sunken page. Both run edge to edge of the section. */
 .qm-audit__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--qm-space-2) var(--qm-space-3);
+  margin: calc(-1 * var(--qm-space-4)) calc(-1 * var(--qm-space-5)) 0;
+  padding: var(--qm-space-3) var(--qm-space-5);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-audit__toolbar h2 {
+  margin: 0;
 }
 
 .qm-audit__tag {
@@ -2039,6 +2069,18 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-audit__form {
   display: grid;
   gap: var(--qm-space-3);
+  /* The band meets the strip: no page gap between them. */
+  margin: calc(-1 * var(--qm-space-3)) calc(-1 * var(--qm-space-5)) 0;
+  padding: var(--qm-space-4) var(--qm-space-5);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  background: var(--qm-color-surface-base);
+}
+
+/* The window hint is the row's last cell: beside To where there is room, its own line otherwise. */
+.qm-audit__window-hint {
+  grid-column: 1 / -1;
+  align-self: end;
+  margin: 0;
 }
 
 .qm-audit__filters {
@@ -2055,8 +2097,29 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 /* Two rows from the section width where the table shows its Credential owner column (mockup v6):
    User, Request ID and Event, then From and To. Narrower, the fields wrap as they fit. */
 @container (min-width: 920px) {
+  /* Twelve tracks, as v6 spans them: User 3, Request ID 5, Event 4; From 3, To 3, the hint 6. The
+     wider Request ID keeps its example on one line, so the band is two short rows. */
   .qm-audit__filters {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .qm-audit__filters > :nth-child(1),
+  .qm-audit__filters > :nth-child(4),
+  .qm-audit__filters > :nth-child(5) {
+    grid-column: span 3;
+  }
+
+  .qm-audit__filters > :nth-child(2) {
+    grid-column: span 5;
+  }
+
+  .qm-audit__filters > :nth-child(3) {
+    grid-column: span 4;
+  }
+
+  .qm-audit__filters > .qm-audit__window-hint {
+    grid-column: span 6;
+    padding-block-end: var(--qm-space-2);
   }
 }
 
@@ -3329,14 +3392,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
-.qm-terminal-pane__subheading {
-  margin: 0 0 var(--qm-space-2);
-  font-size: var(--qm-type-size-md);
-  font-weight: 600;
-}
-
-/* The scroll region of the reference: a keyboard stop with a name (spec 6.4); the heading above
-   it stays in view. */
+/* The scroll region of the reference: a keyboard stop with a name (spec 6.4). */
 .qm-terminal-pane__scroll {
   flex: 1 1 0;
   /* At least two lines of the reference stay in view (BW3 critic C3). */
@@ -3344,31 +3400,47 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-y: auto;
 }
 
-.qm-terminal-pane__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--qm-space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* The syntax and its query type run on in one line of text (a long syntax wraps; its type follows
-   it), so seven commands fit the fold at 1366x768 (mockup v6: a compact list). */
-.qm-terminal-pane__row {
-  min-inline-size: 0;
-}
-
-.qm-terminal-pane__syntax {
+/* Mockup v6 .term-ref: the codes left in the accent, the positions right, both in mono. */
+.qm-terminal-pane__table {
+  inline-size: 100%;
+  border-collapse: collapse;
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-sm);
-  overflow-wrap: anywhere;
 }
 
-.qm-terminal-pane__type {
-  margin-inline-start: var(--qm-space-2);
+.qm-terminal-pane__table caption {
+  margin-block-end: var(--qm-space-1);
+  text-align: start;
+}
+
+.qm-terminal-pane__table thead th {
+  padding: 0;
+}
+
+.qm-terminal-pane__codes,
+.qm-terminal-pane__positions {
+  padding: calc(var(--qm-space-1) / 2) 0;
+  vertical-align: top;
+  text-align: start;
+}
+
+.qm-terminal-pane__codes {
+  padding-inline-end: var(--qm-space-4);
+  color: var(--qm-color-accent);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.qm-terminal-pane__positions {
   color: var(--qm-color-text-muted);
-  font-size: var(--qm-type-size-sm);
+}
+
+/* Each position is a box: the row breaks between them, and only a label wider than the column
+   breaks inside itself. */
+.qm-terminal-pane__positions > span {
+  display: inline-block;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* The account menu's terminal choice (UX-014): a legend over the segmented control, then the width
@@ -3382,12 +3454,6 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.qm-account__terminal-label {
-  padding: 0;
-  font-size: var(--qm-type-size-sm);
-  font-weight: 600;
 }
 
 /* Dispatcher controls are 36 px: the segments of this choice, not the 28 px segment default. */

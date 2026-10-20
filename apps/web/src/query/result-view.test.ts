@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { midSentence, sourceWhy } from "./result-view.js";
+import { midSentence, sourceIcon, sourceWhy } from "./result-view.js";
 
 const t = (key: string, params?: Record<string, string | number | boolean>) =>
   `${key}${params === undefined ? "" : JSON.stringify(params)}`;
@@ -11,6 +11,15 @@ describe("G33 a field label inside a sentence", () => {
     expect(midSentence("Date of birth")).toBe("date of birth");
     expect(midSentence("VIN")).toBe("VIN");
     expect(midSentence("")).toBe("");
+  });
+});
+
+describe("#835 the line icon for a source that did not return (mockup v6 .src-line)", () => {
+  it("is a clock for timed out and a dash for interrupted; the tone's own otherwise", () => {
+    expect(sourceIcon("timedOut")).toBe("clock");
+    expect(sourceIcon("interrupted")).toBe("dash");
+    for (const status of ["pending", "returned", "failed", "credentialsMissing", "unknown"])
+      expect(sourceIcon(status)).toBeUndefined();
   });
 });
 

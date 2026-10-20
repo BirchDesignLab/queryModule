@@ -34,6 +34,8 @@ export function AuditFilterForm({
   const t = useT();
   const uid = useId();
   const userHint = `${uid}-user-hint`;
+  // One hint for the window, beside To (mockup v6), read by both ends of it.
+  const windowHint = `${uid}-window-hint`;
   return (
     <form
       className="qm-audit__form"
@@ -113,6 +115,7 @@ export function AuditFilterForm({
           requiredText=""
           value={form.from}
           onChange={(from) => onChange({ from })}
+          describedBy={windowHint}
           error={errors.from === undefined ? undefined : t(errors.from)}
           data
         />
@@ -122,10 +125,13 @@ export function AuditFilterForm({
           requiredText=""
           value={form.to}
           onChange={(to) => onChange({ to })}
-          description={t("admin.audit.field.windowHint")}
+          describedBy={windowHint}
           error={errors.to === undefined ? undefined : t(errors.to)}
           data
         />
+        <p id={windowHint} className="qm-field__description qm-audit__window-hint">
+          {t("admin.audit.field.windowHint")}
+        </p>
       </div>
       <div className="qm-audit__bar">
         <button type="submit" className="qm-button">
