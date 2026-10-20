@@ -654,6 +654,53 @@ describe("spec 5.2 the sweeper runs from startup and stops before the DB closes 
     expect(m.lines.some((l) => l.includes("sweeper tick failed"))).toBe(false);
   });
 
+  it("the fatal close() stops accepting before it waits for a tick in flight (#760 C-m3)", async () => {
+    const m = await startManual(await envWith());
+    const expired = await m.expiredSession();
+    // hold the tick inside its transaction, at the sessionRevoked write
+    let reached: () => void = () => {};
+    const atGate = new Promise<void>((r) => {
+      reached = r;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    failAudit.seen = async (type) => {
+      if (type !== "sessionRevoked") return;
+      reached();
+      await gate;
+    };
+    const serverClose = Server.prototype.close;
+    vi.spyOn(Server.prototype, "close").mockImplementation(function (this: Server, cb) {
+      sweeperCalls.push("serverClose");
+      return serverClose.call(this, cb);
+    });
+    const endSession = m.s.deps.eventBus.endSession.bind(m.s.deps.eventBus);
+    vi.spyOn(m.s.deps.eventBus, "endSession").mockImplementation((id) => {
+      sweeperCalls.push("endSession");
+      endSession(id);
+    });
+    await m.time.run(SWEEP_INTERVAL_MS);
+    await atGate;
+    const closing = m.s.close();
+    for (let i = 0; i < 5; i += 1) await new Promise((r) => setImmediate(r));
+    // the server stops accepting while the tick is still held
+    expect(sweeperCalls).toEqual(["start", "stop", "serverClose"]);
+    release();
+    await closing;
+    // the tick in flight commits and ends its session's sockets before the DB closes
+    expect(sweeperCalls).toEqual([
+      "start",
+      "stop",
+      "serverClose",
+      "endSession",
+      "stopped",
+      "closeDb",
+    ]);
+    expect(m.s.deps.eventBus.endSession).toHaveBeenCalledWith(expired);
+  });
+
   it("a listen failure never starts the sweeper and stops it before the DB closes", async () => {
     const env = await envWith();
     const taken = createServer();
