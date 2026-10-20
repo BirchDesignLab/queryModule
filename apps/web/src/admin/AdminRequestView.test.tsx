@@ -92,10 +92,10 @@ describe("a settled request", () => {
     expect(entry.querySelector(".qm-request__summary")).toHaveTextContent("ZZ-0001");
     // The entry head carries the request's highest severity, apart from each card's own badge.
     expect(entry.querySelector(".qm-request__severity")).toHaveTextContent("Critical");
-    expect(within(entry).getByText("2e3f4a5b")).toBeVisible();
+    expect(within(entry).getByText(ID)).toBeVisible();
     // The status line of the mockup (#754): done of total, then the counts.
     expect(entry).toHaveTextContent("2 of 2 sources done. 2 returned.");
-    expect(within(entry).getByRole("button", { name: /^Copy reference/ })).toBeVisible();
+    expect(within(entry).getByRole("button", { name: /^Copy ID/ })).toBeVisible();
     expect(screen.getByText("Vehicle query as it was sent and answered. Read only.")).toBeVisible();
     expect(screen.getByText("Your filters are kept.")).toBeVisible();
   });
@@ -124,6 +124,27 @@ describe("a settled request", () => {
     await t.user.click(screen.getByRole("link", { name: "Back to audit log" }));
     await screen.findByRole("table", {}, MAX_WAIT);
     expect(screen.getByRole("heading", { level: 2, name: "Audit log" })).toBeVisible();
+  });
+});
+
+describe("mockup v6 details (#774)", () => {
+  it("shows the full request ID in the meta line, and Copy ID copies all of it", async () => {
+    const { t } = await openView();
+    await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
+    const entry = document.querySelector("li.qm-request") as HTMLElement;
+    expect(within(entry).getByText(ID)).toBeVisible();
+    const write = vi.spyOn(navigator.clipboard, "writeText");
+    await t.user.click(within(entry).getByRole("button", { name: /^Copy ID/ }));
+    expect(write).toHaveBeenCalledWith(ID);
+  });
+
+  it("draws the eye icon in the recorded banner and the arrow on Back, both hidden from the reader", async () => {
+    await openView();
+    await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
+    const banner = screen.getByRole("note");
+    expect(banner.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    const back = screen.getByRole("link", { name: "Back to audit log" });
+    expect(back.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
 });
 

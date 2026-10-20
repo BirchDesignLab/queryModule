@@ -201,6 +201,14 @@ Designed 10-18-26 (BW1 Task 1, #724; FR-050, FR-062, FR-063, FR-064, UX-004, UX-
 7. `configPublished` gets no note key (frozen critical audit contract). BW3 drops the sentence "The audit log records ... your note" from the existing publish dialogs (v4, v5 builder, mock responses) and uses the history-only hint. (D-M2P2-B7)
 8. `loginSucceeded` `clientIp` and `sessionId` show to admins as stored in the audit details disclosure (admin only; every view is audited by `auditViewed`; CJIS investigation need). (D-M2P2-B8)
 
+**Developer rulings 10-19-26 (M2 P3 Track B plan, via the M2 manager):**
+
+1. The version history is v6's 380 px drawer over the builder's end edge, not an inline panel; Escape and Close return focus to History. (D-M2P3-B1)
+2. Beside the terminal pane the form column narrows (424 px at 1366), so the results keep about 566 px and the pane 320 px; nothing changes below `layout.terminalPane`. (D-M2P3-B2)
+3. No terminal pane in the officer layout and no Terminal control in the compact account bar until the M4 P1 layouts. (D-M2P3-B3)
+4. The 540 px results width is measured on the results' content box without the scrollbar: where a classic scrollbar takes about 17 px, the visible width is about 525 px and the rule still holds. (D-M2P3-B4)
+5. The purged card keeps its unit and harness coverage and has no end-to-end path until the M3 retention purge exists; that box moves to M3. (D-M2P3-B5)
+
 ## Revision 2 (design critic, 09-29-26)
 
 One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blocker, 12 important, 12 minor; fixtures clean). Changes, which also bind the implementation tasks:

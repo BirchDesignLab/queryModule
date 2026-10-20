@@ -9,7 +9,7 @@ import { SCROLL_FOCUS } from "./scroll-focus.js";
 
 /**
  * Version history (Task 33 part 2b, #358, BR-001, UX-004): a named region opened from the toolbar's
- * History button. It lists GET /admin/config/versions newest first, with a roll back on each
+ * History button, drawn as mockup v6's 380 px drawer over the builder's end edge (D-M2P3-B1). It lists GET /admin/config/versions newest first, with a roll back on each
  * previous version (the confirm and the request are the publish flow's) and an export on each. Esc
  * closes it; the builder returns focus to the History button. Each published version shows its
  * publisher's name (the id when the server has none) and its change note, or "No note" (D-M2P0-4,
@@ -52,6 +52,7 @@ export function HistoryDrawer({
   id,
   stamp,
   onClose,
+  onLeave,
   onRollback,
 }: {
   /** The region's id, named by the History button's aria-controls. */
@@ -59,6 +60,8 @@ export function HistoryDrawer({
   /** Changes whenever the list on the server did (a roll back, a publish): the list reloads. */
   stamp: number;
   onClose(): void;
+  /** Focus left for the page (not for a dialog it opened): close without moving focus back. */
+  onLeave(): void;
   onRollback(version: number): void;
 }) {
   const t = useT();
@@ -104,6 +107,22 @@ export function HistoryDrawer({
     return () => region.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // The drawer lies over the builder's end edge, so it never stays open behind the focus: when focus
+  // moves to the page (Tab out, a click in the panes) it closes and focus stays where it went
+  // (WCAG 2.4.11). A dialog it opens (roll back) keeps it open.
+  useEffect(() => {
+    const region = regionRef.current;
+    if (region === null) return;
+    const onOut = (e: FocusEvent) => {
+      const next = e.relatedTarget;
+      if (!(next instanceof Element) || region.contains(next)) return;
+      if (next.closest('[role="dialog"], dialog') !== null) return;
+      onLeave();
+    };
+    region.addEventListener("focusout", onOut);
+    return () => region.removeEventListener("focusout", onOut);
+  }, [onLeave]);
+
   // One export per version at a time: a second click on a version whose export is in flight
   // downloads nothing twice. An export of another version is its own request and goes ahead, so
   // no click is dropped without a trace.
@@ -129,7 +148,12 @@ export function HistoryDrawer({
   );
 
   return (
-    <section ref={regionRef} id={id} className="qm-history" aria-labelledby={headingId}>
+    <section
+      ref={regionRef}
+      id={id}
+      className="qm-history qm-history--drawer"
+      aria-labelledby={headingId}
+    >
       <div className="qm-history__head">
         <h3 ref={headingRef} className="qm-editor__title" id={headingId} {...PROGRAMMATIC_FOCUS}>
           {t("admin.history.title")}

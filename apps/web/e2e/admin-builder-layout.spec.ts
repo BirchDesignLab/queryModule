@@ -164,7 +164,7 @@ for (const size of SIZES) {
       page,
     }) => {
       await page.getByRole("button", { name: "Review and publish" }).click();
-      const dialog = page.getByRole("dialog", { name: "Review and publish" });
+      const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
       await expect(dialog).toBeVisible();
       const size = (name: string, level: number) =>
         dialog

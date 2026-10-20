@@ -56,7 +56,7 @@ describe("PublishDialogs", () => {
     const doc = {};
     const open = { ...FLOW, reviewing: 2, changeCount: 1 };
     const view = render(wrap(<PublishDialogs flow={open} doc={doc} />));
-    const dialog = screen.getByRole("dialog", { name: "Review and publish" });
+    const dialog = screen.getByRole("dialog", { name: /^Publish version \d+$/ });
     const publish = within(dialog).getByRole("button", { name: "Publish version 2" });
     publish.focus();
     // The live version moved to what the draft says while the dialog is open.
@@ -64,6 +64,15 @@ describe("PublishDialogs", () => {
     expect(within(dialog).getByRole("button", { name: "Publish version 2" })).toBe(publish);
     expect(publish).toHaveFocus();
     expect(dialog).not.toHaveTextContent("There is nothing to publish");
+  });
+
+  it("uses the v6 title and copy: Publish version n, open screens pick it up, What changes (#774)", () => {
+    render(wrap(<PublishDialogs flow={{ ...FLOW, reviewing: 9, changeCount: 1 }} doc={{}} />));
+    const dialog = screen.getByRole("dialog", { name: "Publish version 9" });
+    expect(dialog).toHaveTextContent(
+      "Open dispatcher and officer screens pick this up within 15 seconds. Their typed values are kept.",
+    );
+    expect(within(dialog).getByRole("region", { name: "What changes" })).toBeInTheDocument();
   });
 
   it("5: a review that opens with no changes still says so", () => {

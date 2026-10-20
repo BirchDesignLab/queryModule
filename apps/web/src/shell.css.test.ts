@@ -33,6 +33,11 @@ function forbiddenLengths(css: string, allowed: readonly string[]): string[] {
 }
 
 describe("shell.css uses token variables only (spec 6.5)", () => {
+  it("holds no control characters: generated content is written as CSS escapes (BW3 critic C1)", () => {
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the test looks for exactly these
+    expect(shellCss).not.toMatch(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/);
+  });
+
   it("has no literal colours or sizes, no var() fallbacks, only known token names", () => {
     expect(shellCss).toContain("body");
     expect(shellCss).toContain(":focus-visible");

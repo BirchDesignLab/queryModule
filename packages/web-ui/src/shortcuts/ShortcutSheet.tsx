@@ -71,6 +71,12 @@ function strokeLabel(stroke: string, layout: LayoutMap | null): string {
   return [...MODIFIERS.filter((m) => mods.includes(m)), key].join("+");
 }
 
+/** A stroke's keycap label without a layout map ("Ctrl+Backquote" reads "Ctrl+`"): the hint beside a
+ *  control, which is drawn before any layout map could resolve. */
+export function shortcutLabel(stroke: string): string {
+  return strokeLabel(stroke, null);
+}
+
 /** The layout map where the browser exposes one (Chromium); null until it resolves, and for good
  *  when it is absent, throws or rejects. The sheet renders with the fallback labels meanwhile.
  *  Asked once per mount, on the first open (#319); later opens reuse the answer. */

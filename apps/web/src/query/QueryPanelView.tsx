@@ -16,6 +16,7 @@ import {
   ShortcutSheet,
   SourceCheckboxes,
   SubmitButton,
+  shortcutLabel,
   TerminalInput,
   TypeFieldBar,
   useShortcutAction,
@@ -185,6 +186,8 @@ function ReadyPanel({
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   const firstQuick = quickShortcut(bindings, 0);
   const lastQuick = quickShortcut(bindings, quickCodes.length - 1);
+  // The terminal shortcut as a keycap beside the toggle (mockup v6, #774), where one is bound.
+  const toggleKeys = preview ? undefined : bindings.toggleMode?.[0]?.keys;
   const quickHint =
     preview || firstQuick === undefined || lastQuick === undefined || quickCodes.length < 2
       ? undefined
@@ -253,6 +256,14 @@ function ReadyPanel({
             terminalLabel={t("mode.terminal")}
             terminal={terminal.mode === "terminal"}
             onSelect={() => terminal.toggle()}
+            icons
+            {...(toggleKeys === undefined
+              ? {}
+              : {
+                  shortcut: shortcutLabel(toggleKeys),
+                  // aria-keyshortcuts names the modifier "Control" ("Control+`").
+                  keys: shortcutLabel(toggleKeys).replace(/^Ctrl\+/, "Control+"),
+                })}
           />
         )}
       </div>

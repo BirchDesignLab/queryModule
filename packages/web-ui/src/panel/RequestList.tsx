@@ -114,6 +114,11 @@ export interface RequestListProps {
    * keeps `heading` as its accessible name and draws none.
    */
   headingLevel?: 2 | 3 | null;
+  /**
+   * Shows each row's whole request ID with a "Copy ID" button (the admin request view, mockup v6),
+   * in place of the short reference the query screen shows.
+   */
+  fullReference?: boolean;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -175,6 +180,7 @@ export function RequestList({
   onEditAsNew,
   revealOnSend = false,
   headingLevel = 2,
+  fullReference = false,
   t,
 }: RequestListProps): JSX.Element {
   const Heading = headingLevel === 2 ? "h2" : "h3";
@@ -358,22 +364,30 @@ export function RequestList({
                       <span>
                         {t("requests.sentAt", { time: formatAckTime(row.acknowledgedAt) })}
                       </span>
-                      <span>
-                        {t("submit.reference")} <code>{shortReference(row.reference)}</code>
-                      </span>
+                      {fullReference ? (
+                        <code className="qm-request__id">{row.reference}</code>
+                      ) : (
+                        <span>
+                          {t("submit.reference")} <code>{shortReference(row.reference)}</code>
+                        </span>
+                      )}
                       {row.statusLine === undefined ? null : <span>{row.statusLine}</span>}
                       <button
                         type="button"
                         className="qm-button qm-button--ghost"
-                        // The first eight characters of a UUIDv7 are a timestamp, so two rows can
-                        // share them: the type and primary field tell the copy buttons apart too.
-                        aria-label={t("requests.copyReferenceOf", {
-                          reference: shortReference(row.reference),
-                          summary: row.name,
-                        })}
+                        // The short reference is the last eight characters of the UUIDv7; two rows
+                        // could still share it, so the type and primary field tell the copy buttons
+                        // apart too.
+                        aria-label={t(
+                          fullReference ? "requests.copyIdOf" : "requests.copyReferenceOf",
+                          {
+                            reference: shortReference(row.reference),
+                            summary: row.name,
+                          },
+                        )}
                         onClick={() => onCopy(row.reference as string)}
                       >
-                        {t("submit.copyReference")}
+                        {t(fullReference ? "requests.copyId" : "submit.copyReference")}
                       </button>
                     </>
                   ) : null}

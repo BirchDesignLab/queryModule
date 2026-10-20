@@ -53,7 +53,7 @@ async function openReview(t: Opened) {
   await t.user.clear(input);
   await t.user.type(input, ",");
   await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
-  return screen.findByRole("dialog", { name: "Review and publish" });
+  return screen.findByRole("dialog", { name: /^Publish version \d+$/ });
 }
 const noteField = (dialog: HTMLElement) =>
   within(dialog).getByRole("textbox", { name: "Change note (optional)" });
@@ -128,7 +128,7 @@ describe("the publish dialog's change note", () => {
     await t.user.click(publish);
     expect(publishes).toHaveLength(0);
     // Still focusable and the dialog stays open.
-    expect(screen.getByRole("dialog", { name: "Review and publish" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /^Publish version \d+$/ })).toBeInTheDocument();
     // Back at the limit it publishes.
     fireEvent.change(noteField(dialog), { target: { value: "a".repeat(200) } });
     expect(field).not.toHaveAttribute("aria-invalid", "true");
@@ -142,10 +142,12 @@ describe("the publish dialog's change note", () => {
     await t.user.type(noteField(dialog), "first");
     await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Review and publish" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("dialog", { name: /^Publish version \d+$/ }),
+      ).not.toBeInTheDocument(),
     );
     await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
-    const again = await screen.findByRole("dialog", { name: "Review and publish" });
+    const again = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     expect(noteField(again)).toHaveValue("");
   });
 

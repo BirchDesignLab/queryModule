@@ -89,7 +89,7 @@ for (const size of SIZES) {
 
     // G18, G20, G39: review and publish, history, roll back.
     await page.getByRole("button", { name: "Review and publish" }).click();
-    const dialog = page.getByRole("dialog", { name: "Review and publish" });
+    const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
     await expect(dialog).toBeVisible();
     await save(page, "g18-review-dialog", w);
     const confirm = dialog.getByRole("button", { name: /^Publish version \d+$/ });

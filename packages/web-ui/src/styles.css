@@ -762,6 +762,11 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+/* The whole request ID (the admin request view): it may break anywhere rather than overflow. */
+.qm-request__id {
+  overflow-wrap: anywhere;
+}
+
 .qm-request__meta {
   flex: 1 0 100%;
   display: flex;
@@ -1577,6 +1582,11 @@ h1 {
   border-radius: var(--qm-radius-sm);
 }
 
+/* A badge and the punctuation right after it never part across lines (#46). */
+.qm-mark__keep {
+  white-space: nowrap;
+}
+
 /* A table scrolls in its own box: the page never scrolls sideways (UX-016). */
 .qm-result-table {
   max-inline-size: 100%;
@@ -1648,4 +1658,46 @@ h1 {
   padding-inline-start: var(--qm-space-3);
   border-inline-start: var(--qm-space-1) solid var(--qm-color-accent);
   color: var(--qm-color-text-body);
+}
+
+/* A line icon beside text (mockup v6, #774): 16 px, the text's color, never the only label. */
+.qm-line-icon {
+  flex: none;
+  inline-size: var(--qm-space-4);
+  block-size: var(--qm-space-4);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The entry mode's icons and keycap hint (mockup v6, #774) sit in line with the label. */
+.qm-seg.qm-mode-seg > button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
+.qm-seg.qm-mode-seg .qm-kbd {
+  border-color: currentColor;
+  color: inherit;
+}
+
+/* In a button the icon sits on the text's middle with a gap before the words. */
+.qm-button > .qm-line-icon {
+  margin-inline-end: var(--qm-space-2);
+  vertical-align: middle;
+}
+
+.qm-button > .qm-line-icon--trailing {
+  margin-inline: var(--qm-space-2) 0;
+}
+
+/* A link drawn as a button keeps the button's box: no underline, the text on its middle. */
+a.qm-button {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  text-decoration: none;
 }

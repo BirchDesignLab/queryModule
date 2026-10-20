@@ -57,6 +57,27 @@ export function TerminalPane({
   const example = terminalExample(config, t);
   const rows = referenceRows(config, t);
   const referenceId = `${idPrefix}-terminal-reference`;
+  // A site lists every command: the list scrolls inside the pane, so it is a named region a
+  // keyboard user can focus (spec 6.4), as the result table is. The heading stays outside it.
+  const list = (
+    // biome-ignore lint/a11y/useSemanticElements: the heading stays outside the scroll, so the region wraps only the list
+    <div
+      className="qm-terminal-pane__scroll"
+      role="region"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard reachable
+      tabIndex={0}
+      aria-label={t("terminalPane.referenceRegion")}
+    >
+      <ul aria-labelledby={referenceId} className="qm-terminal-pane__list">
+        {rows.map((row) => (
+          <li key={row.code} className="qm-terminal-pane__row">
+            <code className="qm-terminal-pane__syntax">{row.syntax}</code>
+            <span className="qm-terminal-pane__type">{row.typeLabel}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
   return (
     <>
       <h2 id={terminalPaneTitleId(idPrefix)}>{t("terminalPane.title")}</h2>
@@ -85,14 +106,7 @@ export function TerminalPane({
           <h3 id={referenceId} className="qm-terminal-pane__subheading">
             {t("terminalPane.referenceTitle")}
           </h3>
-          <ul aria-labelledby={referenceId} className="qm-terminal-pane__list">
-            {rows.map((row) => (
-              <li key={row.code} className="qm-terminal-pane__row">
-                <code className="qm-terminal-pane__syntax">{row.syntax}</code>
-                <span className="qm-terminal-pane__type">{row.typeLabel}</span>
-              </li>
-            ))}
-          </ul>
+          {list}
         </section>
       )}
     </>

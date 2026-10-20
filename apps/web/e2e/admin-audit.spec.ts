@@ -156,3 +156,26 @@ test("[FR-064] at 1366 the filters sit on two rows, in focus order (mockup v6)",
     await expect(field(label)).toBeFocused();
   }
 });
+
+test("[FR-064] at 1024 each row's details disclosure stays on one line (mockup v6, #774)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await signIn(page, ADMIN);
+  await submitOneQuery(page);
+  await openAuditLog(page);
+  const summaries = page.getByRole("table", { name: "Audit events" }).locator("summary");
+  await expect(summaries.first()).toBeVisible();
+  // "10 items" is one line: its height is one line box, not two.
+  const heights = await summaries.evaluateAll((all) =>
+    all.map((el) => {
+      // The visible count is the summary's first text node; the hidden "for <event>" span is not.
+      const text = el.firstChild;
+      if (text === null) return 0;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      return range.getClientRects().length;
+    }),
+  );
+  for (const lines of heights) expect(lines).toBeLessThanOrEqual(1);
+});

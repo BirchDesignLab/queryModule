@@ -297,6 +297,69 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
     await waitFor(() => expect(command()).toHaveValue("VEH"));
   });
 
+  it("the command reference is a keyboard-reachable scroll region with a name (#767, spec 6.4)", async () => {
+    const { user } = await openPanel({ wide: true, terminal: "pane" });
+    const region = within(pane()).getByRole("region", { name: "Command reference" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(within(region).getByRole("list", { name: "Commands" })).toBeVisible();
+    // Tab from the command input reaches it (the pane's next stop).
+    await user.click(command());
+    await user.tab();
+    expect(region).toHaveFocus();
+  });
+
+  it("the polite announcement for an unknown code has no typed text; the visible error keeps it (#767, spec 6.7)", async () => {
+    const { user } = await openPanel({ wide: true, terminal: "pane" });
+    await typeCommand(user, "XYZ.123{Enter}");
+    expect(await within(pane()).findByRole("list", { name: "Command problems" })).toHaveTextContent(
+      "Unrecognized command XYZ.",
+    );
+    const polite = screen.getByTestId("announcer-polite");
+    await waitFor(() => expect(polite).toHaveTextContent("Unrecognized command"));
+    expect(polite.textContent).not.toContain("XYZ");
+    expect(polite.textContent).not.toContain("123");
+  });
+
+  it("other problems keep the count line in the announcement (#767)", async () => {
+    const { user } = await openPanel({ wide: true, terminal: "pane" });
+    // Known code with a value it cannot take: not an unknown command.
+    await typeCommand(user, "VEH.A.B.C.D.E.F{Enter}");
+    await within(pane()).findByRole("list", { name: "Command problems" });
+    const polite = screen.getByTestId("announcer-polite");
+    await waitFor(() => expect(polite).toHaveTextContent(/problems? with the command./));
+    expect(polite.textContent).not.toContain("Unrecognized command");
+  });
+
+  // Mock data only. Each text is accepted by the parser but is not the canonical form the form
+  // would write back, so a rewrite on entering the pane would show.
+  it.each([
+    ["VEH.ZZ-0001.state=OK", "VEH", "ZZ-0001"],
+    ["veh.zz-0001", "VEH", "zz-0001"],
+    ["VEH.ZZ-0001.OK.", "VEH", "ZZ-0001"],
+    ["VEH.ZZ-0001..2026", "VEH", "ZZ-0001"],
+    ["  VEH.ZZ-0001", "VEH", "ZZ-0001"],
+    ["per.doe", "PER", null],
+  ])(
+    "entering pane mode keeps the command text as typed in the panel's terminal: %j (#767, spec 6.7)",
+    async (typed, queryType, plateValue) => {
+      const { user, services } = await openPanel({ wide: true, terminal: "toggle" });
+      await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+      const input = screen.getByRole("textbox", { name: "Command" });
+      await user.clear(input);
+      await user.type(input, typed);
+      // The account menu's pick: the layout becomes pane, and the window is wide.
+      act(() => {
+        services.preferences.getState().setLayout({ orientation: "horizontal", terminal: "pane" });
+      });
+      await waitFor(() => expect(pane()).toBeVisible());
+      // One draft: the form holds what the command read, and the command is not rewritten from it.
+      await waitFor(() => expect(services.drafts.getState().queryType).toBe(queryType));
+      if (plateValue !== null) expect(plate()).toHaveValue(plateValue);
+      expect(command()).toHaveValue(typed);
+      expect(services.drafts.getState().mode).toBe("form");
+    },
+  );
+
   it("clearing the form clears the command back to the bare command", async () => {
     const { user } = await openPanel({ wide: true, terminal: "pane" });
     await user.type(plate(), "ZZ-0010");

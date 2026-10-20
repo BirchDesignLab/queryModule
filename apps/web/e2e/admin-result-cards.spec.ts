@@ -127,7 +127,7 @@ async function selectVehicleCard(page: Page): Promise<void> {
 /** Review and publish by keyboard; returns the version that went live and the dialog's text. */
 async function publish(page: Page): Promise<{ version: number; review: string }> {
   await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Review and publish" });
+  const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
   await expect(dialog).toBeVisible();
   const confirm = dialog.getByRole("button", { name: /^Publish version \d+$/ });
   await expectNoSeriousAxeViolations(page);
@@ -774,7 +774,7 @@ test("[#605] a blank trigger beside a filled one warns and does not block Review
   await expect(page.getByTestId("draft-summary")).toContainText(/Draft checks: 0 errors/);
   await expectNoSeriousAxeViolations(page);
   await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Review and publish" });
+  const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
   await expect(dialog).toBeVisible();
   await expect(page.getByText(/Not published: \d+ errors? to fix first/)).toHaveCount(0);
   await expectNoSeriousAxeViolations(page);

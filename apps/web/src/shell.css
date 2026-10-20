@@ -765,6 +765,7 @@ main[tabindex="-1"]:focus {
 
 /* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
+  position: relative;
   grid-column: 1 / -1;
   align-self: stretch;
   display: flex;
@@ -1808,6 +1809,26 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border-radius: var(--qm-radius-panel);
 }
 
+/* The drawer of mockup v6 (D-M2P3-B1): 380 px over the builder's end edge, from the top of the
+   builder body to its bottom, on the overlay surface. The panes keep their place under it; the list
+   scrolls inside it. 380 px is 19 steps of the 20 px space token. */
+.qm-history--drawer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-3);
+  inline-size: min(calc(var(--qm-space-5) * 19), 100%);
+  margin: 0;
+  padding: var(--qm-space-5);
+  background: var(--qm-color-surface-overlay);
+  border-radius: 0;
+  border-block: 0;
+  border-inline-end: 0;
+}
+
 .qm-history__head {
   display: flex;
   flex-wrap: wrap;
@@ -1823,6 +1844,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-history__scroll {
   max-block-size: calc(var(--qm-space-12) * 5);
   overflow-y: auto;
+}
+
+.qm-history--drawer .qm-history__scroll {
+  flex: 1 1 0;
+  min-block-size: 0;
+  max-block-size: none;
 }
 
 .qm-history__list {
@@ -1875,6 +1902,27 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-history__none {
   color: var(--qm-color-text-muted);
+}
+
+/* In the drawer each version is a card of its own, as v6 draws it (D-M2P3-B1). */
+/* The publish and roll back notices stay readable beside an open drawer (BW3 critic C2). */
+.qm-builder__body:has(> .qm-history--drawer) > .qm-builder__notice {
+  margin-inline-end: calc(var(--qm-space-5) * 19);
+}
+
+.qm-history--drawer .qm-history__list {
+  gap: var(--qm-space-2);
+}
+
+.qm-history--drawer .qm-history__row {
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-history--drawer .qm-history__none {
+  font-style: italic;
 }
 
 /* The publish dialog's change note: label and count on one line over a wrapping text area. */
@@ -1980,6 +2028,9 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-audit__recorded {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
   margin-inline-start: auto;
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
@@ -2038,11 +2089,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: 0;
 }
 
+/* v6: a centered box with its icon over the heading; an error has the invalid edge. */
 .qm-audit__state {
   display: grid;
   gap: var(--qm-space-2);
-  justify-items: start;
-  padding: var(--qm-space-4);
+  justify-items: center;
+  text-align: center;
+  padding: var(--qm-space-8) var(--qm-space-4);
   background: var(--qm-color-surface-base);
   border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
@@ -2050,7 +2103,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__state--error {
   border-style: solid;
-  border-color: var(--qm-color-border);
+  border-color: var(--qm-field-required);
+}
+
+.qm-audit__state > .qm-line-icon {
+  inline-size: calc(var(--qm-space-6) + var(--qm-space-1));
+  block-size: calc(var(--qm-space-6) + var(--qm-space-1));
 }
 
 .qm-audit__state h3,
@@ -2087,10 +2145,50 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* v6: the caption is the card's head bar; events read bold, the role is a pill, and the details
+   toggle reads "+ n items" in the accent (issue 774). */
 .qm-audit__caption {
-  padding: var(--qm-space-2) var(--qm-space-3);
-  color: var(--qm-color-text-muted);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  background: var(--qm-color-surface-raised);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  color: var(--qm-color-text-body);
+  font-weight: 600;
   text-align: start;
+}
+
+.qm-audit__event {
+  font-weight: 500;
+}
+
+.qm-badge.qm-audit__role {
+  background: transparent;
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-space-12);
+  color: var(--qm-color-text-muted);
+}
+
+.qm-audit__details > summary {
+  display: inline-flex;
+  gap: var(--qm-space-1);
+  color: var(--qm-color-accent);
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+
+.qm-audit__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qm-audit__details > summary::before {
+  /* Decorative: the empty alternative text keeps the sign out of the summary's name. */
+  content: "+" / "";
+  inline-size: var(--qm-space-3);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-audit__details[open] > summary::before {
+  content: "\2212" / "";
 }
 
 .qm-audit__cell {
@@ -2152,9 +2250,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
-.qm-audit__page-size {
+/* Rows per page: the label beside its select, as v6 draws it. */
+.qm-field.qm-audit__page-size {
+  margin-block-end: 0;
   flex-direction: row;
   align-items: center;
+  gap: var(--qm-space-2);
   margin-inline-start: auto;
 }
 
@@ -2176,13 +2277,16 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* The recorded note of mockup v6: an info start edge and an eye, on the base surface (issue 774). */
 .qm-request-view__banner {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--qm-space-2) var(--qm-space-3);
   padding: var(--qm-space-2) var(--qm-space-3);
-  background: var(--qm-color-accent-subtle);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-inline-start: calc(var(--qm-border-width) * 4) solid var(--qm-color-severity-info-bg);
   border-radius: var(--qm-radius-control);
 }
 
@@ -3154,26 +3258,42 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   flex: 1 0 auto;
 }
 
-/* Terminal beside the results (FR-050, UX-014, D-M2P2-B2; mockup v6 "Terminal pane"). From
-   layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns: the
-   form in its panel (448 px), the results in the middle (they take the rest, 384 px at least and
-   540 px at 1366), the terminal on the right (320 px). The page script renders the pane only from this
-   width, so below it the Form and Terminal toggle is back and these rules do not apply. Widths are
-   multiples of the spacing tokens (no literal lengths outside a query condition). */
+/* Terminal beside the results (FR-050, UX-014, D-M2P2-B2, D-M2P3-B2; mockup v6 "Terminal pane").
+   From layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns:
+   the form in its panel (424 px), the results in the middle (they take the rest, 384 px at least
+   and 566 px at 1366), the terminal on the right (320 px). The page script renders the pane only
+   from this width, so below it the Form and Terminal toggle is back and these rules do not apply.
+   Widths are multiples of the spacing tokens (no literal lengths outside a query condition). */
 @media (min-width: 1280px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes.qm-panes--terminal {
-    /* The results have width priority (mockup v6): the form takes its 448 px floor, not its
-       480 px ceiling, and the gaps are 12 px, so the results keep 540 px or more at 1366 (about 525 px where a classic scrollbar takes 17 px). */
+    /* The results have width priority (spec 6.2, mockup v6): the form column narrows while the
+       pane shows, below its 448 px floor of the two-column layout, and the gaps are 12 px, so the
+       results keep 566 px at 1366 (about 549 px where a classic scrollbar takes 17 px). */
     grid-template-columns:
-      calc(var(--qm-space-8) * 14)
+      calc(var(--qm-space-8) * 13 + var(--qm-space-2))
       minmax(calc(var(--qm-space-12) * 8), 1fr)
       calc(var(--qm-space-8) * 10);
     column-gap: var(--qm-space-3);
   }
+
+  /* The pane is as tall as its row, which the form sets, and not taller for its content: the
+     command reference scrolls inside it (a site lists every command). It never makes the row
+     taller than the form, so the page does not grow with the list (issue 767). The floor keeps the
+     input and its problems whole beside a short form. */
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes--terminal > .qm-terminal-pane {
+    align-self: stretch;
+    contain: size;
+    min-block-size: calc(var(--qm-space-8) * 10);
+    /* A short form with several problems: the pane scrolls rather than draw past its card. */
+    overflow-y: auto;
+  }
 }
 
-/* The pane is a card of its own on the sunken page, like the panel and the requests. */
+/* The pane is a card of its own on the sunken page, like the panel and the requests. A column, so
+   the reference takes the height that is left and scrolls (see the three-column rule above). */
 .qm-terminal-pane {
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   min-inline-size: 0;
   padding: var(--qm-space-4) var(--qm-space-5);
@@ -3199,7 +3319,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-terminal-pane__reference {
-  margin-block-start: var(--qm-space-3);
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-block-size: 0;
+  /* In a column the margins do not collapse: 4 px with the note's 8 px above is the 12 px gap. */
+  margin-block-start: var(--qm-space-1);
   padding-block-start: var(--qm-space-2);
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
@@ -3208,6 +3333,15 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0 0 var(--qm-space-2);
   font-size: var(--qm-type-size-md);
   font-weight: 600;
+}
+
+/* The scroll region of the reference: a keyboard stop with a name (spec 6.4); the heading above
+   it stays in view. */
+.qm-terminal-pane__scroll {
+  flex: 1 1 0;
+  /* At least two lines of the reference stay in view (BW3 critic C3). */
+  min-block-size: calc(var(--qm-space-12) * 2);
+  overflow-y: auto;
 }
 
 .qm-terminal-pane__list {
@@ -3271,4 +3405,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-account__terminal .qm-form-error {
   margin: 0;
   max-inline-size: 36ch;
+}
+
+/* At a narrow window (320 px reflow, 200% zoom) the entry mode toggle drops v6's icons and keycap
+   hint, so it fits the panel; the labels and aria-keyshortcuts stay (issue 774). */
+@media (max-width: 720px) {
+  .qm-mode-seg .qm-line-icon,
+  .qm-mode-seg kbd {
+    display: none;
+  }
 }

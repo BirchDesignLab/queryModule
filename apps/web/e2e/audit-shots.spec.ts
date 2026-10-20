@@ -75,7 +75,7 @@ for (const size of SIZES) {
     const w = size.width;
 
     await page.getByRole("button", { name: "Review and publish" }).click();
-    const dialog = page.getByRole("dialog", { name: "Review and publish" });
+    const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
     await expect(dialog).toBeVisible();
     const note = dialog.getByRole("textbox", { name: /note/i });
     // The note field needs the client-side build of Task 5; a missing one fails the spec loudly.
@@ -108,6 +108,79 @@ for (const size of SIZES) {
         data: { ...before, layout: before.layout },
         headers: API_HEADERS,
       });
+    }
+  });
+}
+
+// The v6 frames BW5 left without a shot (#774): the account menu's terminal preference and its
+// failed save, and the audit log's empty, no access (403), turned off (404), filter error and pager
+// states. Server states are routed in the browser; nothing is changed on the server.
+for (const size of SIZES) {
+  test(`account menu preference and save failed at ${size.width}x${size.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(size);
+    await signIn(page, ADMIN);
+    await expect(page.getByLabel("Plate", { exact: true })).toBeVisible();
+    const account = page.getByRole("banner").locator(".qm-account__button");
+    await account.click();
+    await expect(page.getByRole("group", { name: "Terminal" })).toBeVisible();
+    await save(page, "account-preference", size.width);
+    await page.route(`**${PREFERENCES}`, (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 500, json: {} })
+        : route.continue(),
+    );
+    await page
+      .getByRole("group", { name: "Terminal" })
+      .getByRole("button", { name: "Beside results" })
+      .click();
+    await expect(
+      page.getByText("Could not save the layout. It stays on In the panel."),
+    ).toBeVisible();
+    await save(page, "account-save-failed", size.width);
+  });
+
+  test(`audit log states at ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await signIn(page, ADMIN);
+    await expect(page.getByLabel("Plate", { exact: true })).toBeVisible();
+    const w = size.width;
+    await page.goto("/admin/audit");
+    await expect(page.getByRole("table").first()).toBeVisible();
+
+    // Pager: the bottom of the loaded table.
+    await page.getByRole("navigation", { name: "Audit pages" }).scrollIntoViewIfNeeded();
+    await save(page, "audit-pager", w);
+
+    // Filter error: a request ID that is not a UUIDv7.
+    await page.getByRole("textbox", { name: "Request ID" }).fill("0192f3a1-7c2e-4b10");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("textbox", { name: "Request ID" })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await save(page, "audit-filter-error", w);
+
+    // Empty: the server answers with no rows.
+    await page.route("**/api/v1/admin/audit?*", (route) =>
+      route.fulfill({ json: { events: [], nextCursor: null } }),
+    );
+    await page.getByRole("button", { name: "Reset" }).first().click();
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByText("No audit events match")).toBeVisible();
+    await save(page, "audit-empty", w);
+
+    for (const [status, name] of [
+      [403, "audit-403"],
+      [404, "audit-404"],
+    ] as const) {
+      await page.unroute("**/api/v1/admin/audit?*");
+      await page.route("**/api/v1/admin/audit?*", (route) => route.fulfill({ status, json: {} }));
+      await page.goto("/admin/audit");
+      await expect(page.locator(".qm-audit__state").first()).toBeVisible();
+      await save(page, name, w);
     }
   });
 }

@@ -151,7 +151,7 @@ test.describe("[#46 CFG-1] a label-only publish reaches an open tab", () => {
       await sect.getByLabel("Text", { exact: true }).fill("Plate number");
       await sect.getByRole("button", { name: "Add English label" }).press("Enter");
       await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-      const dialog = page.getByRole("dialog", { name: "Review and publish" });
+      const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
       const confirm = dialog.getByRole("button", { name: /^Publish version \d+$/ });
       const version = Number(/\d+/.exec(await confirm.innerText())?.[0]);
       await confirm.press("Enter");

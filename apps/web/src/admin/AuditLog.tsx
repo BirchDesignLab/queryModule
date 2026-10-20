@@ -1,6 +1,6 @@
 import { useStore } from "@querymodule/client";
 import type { AdminAuditPage, AdminUser } from "@querymodule/core/contracts";
-import { VisuallyHidden } from "@querymodule/web-ui";
+import { LineIcon, VisuallyHidden } from "@querymodule/web-ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
@@ -228,7 +228,10 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
       <div className="qm-audit__toolbar">
         <SectionHeading>{t("admin.audit.title")}</SectionHeading>
         <span className="qm-audit__tag">{t("admin.audit.adminOnly")}</span>
-        <span className="qm-audit__recorded">{t("admin.audit.recorded")}</span>
+        <span className="qm-audit__recorded">
+          <LineIcon name="eye" />
+          {t("admin.audit.recorded")}
+        </span>
       </div>
       <AuditFilterForm
         form={form}
@@ -247,6 +250,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
           aria-describedby={exportId}
           onClick={runExport}
         >
+          <LineIcon name="download" />
           {t("admin.audit.export")}
         </button>
         <p id={exportId} className="qm-audit__export-line">
@@ -340,6 +344,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
                   aria-describedby={atNewest ? newestWhy : undefined}
                   onClick={newer}
                 >
+                  <LineIcon name="up" />
                   {t("admin.audit.newer")}
                 </button>
                 <button
@@ -350,6 +355,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
                   onClick={older}
                 >
                   {t("admin.audit.older")}
+                  <LineIcon name="down" trailing />
                 </button>
                 <VisuallyHidden>
                   <span id={newestWhy}>{t("admin.audit.newestPage")}</span>
