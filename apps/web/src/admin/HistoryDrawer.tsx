@@ -52,6 +52,7 @@ export function HistoryDrawer({
   id,
   stamp,
   onClose,
+  onLeave,
   onRollback,
 }: {
   /** The region's id, named by the History button's aria-controls. */
@@ -59,6 +60,8 @@ export function HistoryDrawer({
   /** Changes whenever the list on the server did (a roll back, a publish): the list reloads. */
   stamp: number;
   onClose(): void;
+  /** Focus left for the page (not for a dialog it opened): close without moving focus back. */
+  onLeave(): void;
   onRollback(version: number): void;
 }) {
   const t = useT();
@@ -103,6 +106,22 @@ export function HistoryDrawer({
     region.addEventListener("keydown", onKey);
     return () => region.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // The drawer lies over the builder's end edge, so it never stays open behind the focus: when focus
+  // moves to the page (Tab out, a click in the panes) it closes and focus stays where it went
+  // (WCAG 2.4.11). A dialog it opens (roll back) keeps it open.
+  useEffect(() => {
+    const region = regionRef.current;
+    if (region === null) return;
+    const onOut = (e: FocusEvent) => {
+      const next = e.relatedTarget;
+      if (!(next instanceof Element) || region.contains(next)) return;
+      if (next.closest('[role="dialog"], dialog') !== null) return;
+      onLeave();
+    };
+    region.addEventListener("focusout", onOut);
+    return () => region.removeEventListener("focusout", onOut);
+  }, [onLeave]);
 
   // One export per version at a time: a second click on a version whose export is in flight
   // downloads nothing twice. An export of another version is its own request and goes ahead, so

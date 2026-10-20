@@ -13,10 +13,10 @@ export interface HighlightedProps {
   t: ResultT;
 }
 
-/** Text with each keyword hit in a mark: icon, the word, marker and a hidden severity (UX-010, UX-011). */
 /** The punctuation that may not start a line: kept with the badge before it. */
 const TRAILING_PUNCTUATION = /^[,.;:!?)\]]+/;
 
+/** Text with each keyword hit in a mark: icon, the word, marker and a hidden severity (UX-010, UX-011). */
 export function Highlighted({
   text,
   keywords,

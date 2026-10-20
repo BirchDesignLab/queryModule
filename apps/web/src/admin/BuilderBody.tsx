@@ -169,6 +169,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
     setHistoryOpen(false);
     historyRef.current?.focus();
   }, []);
+  const leaveHistory = useCallback(() => setHistoryOpen(false), []);
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
   // The issue button and the preview's "Go to the error" share this path: select the issue's item,
@@ -355,6 +356,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
               id={`${uid}-history`}
               stamp={flow.historyStamp}
               onClose={closeHistory}
+              onLeave={leaveHistory}
               onRollback={flow.askRollback}
             />
           )}

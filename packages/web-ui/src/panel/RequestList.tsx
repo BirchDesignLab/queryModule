@@ -375,8 +375,9 @@ export function RequestList({
                       <button
                         type="button"
                         className="qm-button qm-button--ghost"
-                        // The first eight characters of a UUIDv7 are a timestamp, so two rows can
-                        // share them: the type and primary field tell the copy buttons apart too.
+                        // The short reference is the last eight characters of the UUIDv7; two rows
+                        // could still share it, so the type and primary field tell the copy buttons
+                        // apart too.
                         aria-label={t(
                           fullReference ? "requests.copyIdOf" : "requests.copyReferenceOf",
                           {

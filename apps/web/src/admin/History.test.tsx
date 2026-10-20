@@ -192,6 +192,15 @@ describe("the history drawer", () => {
     expect(region).not.toBeInTheDocument();
   });
 
+  it("closes when focus leaves it for the builder, and focus stays where it went (WCAG 2.4.11, BW3 critic C2)", async () => {
+    const t = await openBuilder();
+    const region = await openHistory(t);
+    const search = screen.getByRole("searchbox", { name: "Find a field or setting" });
+    await t.user.click(search);
+    await waitFor(() => expect(region).not.toBeInTheDocument());
+    expect(search).toHaveFocus();
+  });
+
   it("History again, or Close, closes it too", async () => {
     const t = await openBuilder();
     const region = await openHistory(t);
@@ -208,23 +217,29 @@ describe("the history drawer", () => {
     expect(historyButton()).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("8: Save draft reloads the open list", async () => {
+  // Item 8 with the v6 drawer (D-M2P3-B1): editing the builder moves focus out, so the drawer
+  // closes (BW3 critic C2); the list shown when it opens again is fetched after the save.
+  it("8: after Save draft the history opens with a fresh list", async () => {
     const t = await openBuilder();
     await openHistory(t);
     await setDelimiter(t, ",");
-    const versions = calls.versions;
+    expect(screen.queryByRole("region", { name: "Version history" })).not.toBeInTheDocument();
     await t.user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
+    const versions = calls.versions;
+    await openHistory(t);
+    expect(calls.versions).toBeGreaterThan(versions);
   });
 
-  it("8: Review and publish reloads the open list when it saved the draft", async () => {
+  it("8: after Review and publish saved the draft the history opens with a fresh list", async () => {
     const t = await openBuilder();
-    await openHistory(t);
     await setDelimiter(t, ",");
-    const versions = calls.versions;
     await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
     await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
-    await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
+    await t.user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const versions = calls.versions;
+    await openHistory(t);
+    expect(calls.versions).toBeGreaterThan(versions);
   });
 
   it("a failed load says so and offers Try again", async () => {

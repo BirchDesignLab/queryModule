@@ -1905,6 +1905,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* In the drawer each version is a card of its own, as v6 draws it (D-M2P3-B1). */
+/* The publish and roll back notices stay readable beside an open drawer (BW3 critic C2). */
+.qm-builder__body:has(> .qm-history--drawer) > .qm-builder__notice {
+  margin-inline-end: calc(var(--qm-space-5) * 19);
+}
+
 .qm-history--drawer .qm-history__list {
   gap: var(--qm-space-2);
 }
@@ -2063,14 +2068,6 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   align-items: center;
 }
 
-/* Rows per page: the label beside its select, as v6 draws it. */
-.qm-field.qm-audit__page-size {
-  margin-block-end: 0;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--qm-space-2);
-}
-
 .qm-audit__grow {
   flex: 1 1 auto;
 }
@@ -2184,13 +2181,14 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-audit__details > summary::before {
-  content: "+";
+  /* Decorative: the empty alternative text keeps the sign out of the summary's name. */
+  content: "+" / "";
   inline-size: var(--qm-space-3);
   font-family: var(--qm-type-family-data);
 }
 
 .qm-audit__details[open] > summary::before {
-  content: "2";
+  content: "\2212" / "";
 }
 
 .qm-audit__cell {
@@ -2252,10 +2250,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
+/* Rows per page: the label beside its select, as v6 draws it. */
 .qm-field.qm-audit__page-size {
   margin-block-end: 0;
   flex-direction: row;
   align-items: center;
+  gap: var(--qm-space-2);
   margin-inline-start: auto;
 }
 
@@ -3284,6 +3284,8 @@ body:has(.qm-app-header--compact) .qm-skip-link {
     align-self: stretch;
     contain: size;
     min-block-size: calc(var(--qm-space-8) * 10);
+    /* A short form with several problems: the pane scrolls rather than draw past its card. */
+    overflow-y: auto;
   }
 }
 
@@ -3337,7 +3339,8 @@ body:has(.qm-app-header--compact) .qm-skip-link {
    it stays in view. */
 .qm-terminal-pane__scroll {
   flex: 1 1 0;
-  min-block-size: 0;
+  /* At least two lines of the reference stay in view (BW3 critic C3). */
+  min-block-size: calc(var(--qm-space-12) * 2);
   overflow-y: auto;
 }
 
