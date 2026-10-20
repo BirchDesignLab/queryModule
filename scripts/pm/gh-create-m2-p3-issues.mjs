@@ -82,7 +82,7 @@ const aTasks = [
     [],
     {
       blockedBy: ["A4"],
-      note: "Carries the CFG-4 box of #46. Provisional until D-M2P3-4 is ruled.",
+      note: "Carries the CFG-4 box of #46. Ruled D-M2P3-4 (developer 10-19-26).",
     },
   ],
   [
@@ -92,7 +92,7 @@ const aTasks = [
     [],
     {
       blockedBy: ["A4"],
-      note: "Carries the CFG-1 box of #46 (server half). Provisional until D-M2P3-5 is ruled. Contract change: master plan 8.4 row.",
+      note: "Carries the CFG-1 box of #46 (server half). Ruled D-M2P3-5 (developer 10-19-26). Contract change: master plan 8.4 row.",
     },
   ],
   [
@@ -100,7 +100,7 @@ const aTasks = [
     "Refuse a foreign Origin on every REST route (spec 5.3, 10.7)",
     true,
     [],
-    { carried: [753], note: "Provisional until #753 (D-M2P3-1) is ruled." },
+    { note: "Ruled option B on #753 (D-M2P3-1, developer 10-19-26); #753 is closed." },
   ],
   [
     10,
@@ -109,7 +109,7 @@ const aTasks = [
     [],
     {
       blockedBy: ["A9"],
-      note: "Carries the change-password lockout box of #46. Provisional until D-M2P3-3 is ruled.",
+      note: "Carries the change-password lockout box of #46. Ruled D-M2P3-3 (developer 10-19-26).",
     },
   ],
   [11, "M2 security map: every spec 12.7 M2 row has a named test", true, []],
@@ -143,7 +143,7 @@ const aTasks = [
     [],
     {
       blockedBy: ["A8", "A11", "A14"],
-      note: "Runs on the Linux deploy host (D-M2P3-10).",
+      note: "Runs on the Linux deploy host in a host lane session; the developer approves the live config:import (D-M2P3-10).",
     },
   ],
   [
@@ -151,7 +151,7 @@ const aTasks = [
     "ADR-0014: replay excludes hidden moves to the M3 P2 gate",
     false,
     [],
-    { note: "Provisional until D-M2P3-2 is ruled." },
+    { note: "Ruled D-M2P3-2 (developer 10-19-26)." },
   ],
   [
     19,
@@ -218,7 +218,7 @@ const bTasks = [
     [],
     {
       blockedBy: ["A8"],
-      note: "Carries the CFG-1 box of #46 (client half). Provisional until D-M2P3-5 is ruled.",
+      note: "Carries the CFG-1 box of #46 (client half). Ruled D-M2P3-5 (developer 10-19-26).",
     },
   ],
   [10, "NVDA and Chrome pass for the M2 exit (spec 10.6)", false, [], { blockedBy: ["B8", "B9"] }],
