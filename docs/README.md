@@ -54,7 +54,7 @@ code disagree, the code and the newest decision record win.
 | [briefs](briefs/) | The design brief (HTML source, PDF, screenshots) |
 | [retros](retros/) | Retrospectives on the process |
 | [board](board/) | `board-data.json`, the project board's data (read by `scripts/ops/gh-setup-project.mjs`) |
-| [testing](testing/) | `stories.json`, the map from story IDs to their tests (read by CI) |
+| [testing](testing/) | `stories.json`, the map from story IDs to their tests (read by CI); the M2 security and accessibility maps; the NVDA with Chrome script for the M2 exit ([nvda-m2.md](testing/nvda-m2.md)) |
 
 The folder name `superpowers` comes from the planning tool that wrote the first specs and plans.
 Scripts read files in it, so it keeps its name.
