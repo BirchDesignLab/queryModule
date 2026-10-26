@@ -27,12 +27,13 @@ has burned a month of usage in about ten minutes.
 
 | Model | Relative cost | Effort levels | Capable of |
 |---|---|---|---|
-| Haiku 4.5 | 1x | None. The API rejects `effort` on Haiku; set `model` only and write `effort: n/a` in the plan so the choice reads as deliberate. | Fast, literal work: listing files, grep sweeps, pulling fields out of JSON or docs, summarizing one file, reformatting. **Not** for judging correctness, multi-file reasoning, or anything touching the sensitive code below. 200K context. |
-| Sonnet 5.5 | 2x (assumed) | `low` `medium` `high` `xhigh` `max` | Strong coder. Implements from a precise spec, writes tests, runs routine finders, verifies or refutes a claim against the code. |
-| Opus 5.5 | 4x | `low` `medium` `high` `xhigh` `max`. Always thinks; effort is its only cost control. | Hardest reasoning: the sensitive code below, design, synthesis across many reports, whole-branch review. |
+| Haiku 5.5 | 1x | `low` `medium` `high` `xhigh` `max`, default `medium`. The workflows still pass `model` only (Haiku 4.5 rejected `effort`), so Haiku runs at `medium`; write `effort: n/a` in the plan so the choice reads as deliberate. | Fast, literal work: listing files, grep sweeps, pulling fields out of JSON or docs, summarizing one file, reformatting. **Not** for judging correctness, multi-file reasoning, or anything touching the sensitive code below. 1M context. |
+| Sonnet 5.5 | 20x | `low` `medium` `high` `xhigh` `max` | Strong coder. Implements from a precise spec, writes tests, runs routine finders, verifies or refutes a claim against the code. |
+| Opus 5.5 | 40x | `low` `medium` `high` `xhigh` `max`. Always thinks; effort is its only cost control. | Hardest reasoning: the sensitive code below, design, synthesis across many reports, whole-branch review. |
 
-Relative cost is per token (API list prices: Haiku $1/$5, Sonnet 5.5 assumed at Sonnet 5's $2/$10 until confirmed,
-Opus 5.5 $4/$20 per million in/out). Effort multiplies on top of it: higher
+Relative cost is per token (API list prices: Haiku 5.5 $0.10/$0.50 for prompts up to 100K
+tokens, $0.50/$2.50 beyond; Sonnet 5.5 $2/$10; Opus 5.5 $4/$20 per million in/out). The `haiku`
+alias meant Haiku 4.5 ($1/$5) until about 10-06-26. Effort multiplies on top of it: higher
 effort means more thinking and more tool calls per task.
 
 **Fable is never a subagent model.** It costs more than twice Opus.
@@ -161,7 +162,7 @@ credential handling or audit logging is a compliance failure, not a bug.
 | Sonnet 5.5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the re-reviewer on a gate-tier task. |
 | Sonnet 5.5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; the re-reviewer on an ordinary task. |
 | Sonnet 5.5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
-| Haiku 4.5 | n/a | Enumeration and extraction: list, grep, pull fields, summarize one file, pull requirement IDs out of the spec. |
+| Haiku 5.5 | n/a | Enumeration and extraction: list, grep, pull fields, summarize one file, pull requirement IDs out of the spec. |
 
 ## Rules
 
