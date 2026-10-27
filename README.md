@@ -28,7 +28,7 @@ What each milestone delivered: [overview](docs/overview.md). What is planned and
 
 ## Quick start
 
-Needs Node 24 (24.15 or newer) and corepack.
+Needs Node 24 (24.22.1 or newer) and corepack.
 
 ```bash
 corepack enable

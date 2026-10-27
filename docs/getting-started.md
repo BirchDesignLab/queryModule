@@ -5,8 +5,8 @@ nothing here connects to a real state or national system.
 
 ## Prerequisites
 
-- Node 24, version 24.15 or newer within 24.x (`engines` in the root `package.json`; `.nvmrc` says
-  `24` so CI takes the newest 24 release; ADR-0001).
+- Node 24, version 24.22.1 or newer within 24.x (`engines` in the root `package.json`; `.nvmrc`
+  pins `24.22.1`, the Node2Shell fix, CVE-2026-111497; ADR-0001).
 - pnpm 12.6 through corepack (`packageManager` in `package.json`).
 - Git. On Windows, put Git's `bin` folder first on `PATH` so the shell scripts the tests call run
   under Git Bash.
