@@ -105,7 +105,8 @@ jobs:
         run: pnpm audit --prod
       - name: Dependency review
         # Private repos need GitHub Advanced Security for this action (not available on a
-        # personal account); pnpm audit --prod above still fails on any advisory (10-27-26).
+        # personal account). pnpm audit --prod above still fails on any runtime-dependency
+        # advisory; dev-only dependencies go unchecked while the repo is private (10-27-26).
         if: github.event_name == 'pull_request' && !github.event.repository.private
         uses: actions/dependency-review-action@v5
         with:

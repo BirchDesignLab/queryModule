@@ -73,5 +73,5 @@ Context: run data from M0 to M1 P3 showed the Opus critic found the real defects
 ## Amendment 10-27-26: dependency review on a private repository
 
 - The repository is private for now. `actions/dependency-review-action` needs GitHub Advanced Security on a private repository, which a personal account cannot buy, so the step runs only when `github.event.repository.private` is false. `scripts/ci/ci-workflow.test.ts` pins the condition.
-- `pnpm audit --prod` and the lockfile registry check still run on every change and stand in for a review on `[deps]`-tier changes; the audit fails on any advisory not in `auditConfig.ignoreGhsas`, a stricter level than the dependency review's moderate.
+- `pnpm audit --prod` and the lockfile registry check still run on every change and stand in for a review on `[deps]`-tier changes; the audit fails on any runtime-dependency advisory not in `auditConfig.ignoreGhsas`, a stricter level than the dependency review's moderate. `--prod` leaves out devDependencies, which the dependency review covered, so a dev-only advisory in a `[deps]` PR goes unchecked while the repository is private.
 - When the repository is public again the step runs with no change.
