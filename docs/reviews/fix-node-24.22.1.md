@@ -1,25 +1,24 @@
 ---
 reviewer: "opus-5.5"
 effort: "medium"
-reviewedSha: "1530dfc91418d1093416348dc2ea4ce7ab4abb07"
+reviewedSha: "e4aa37814260df1236c0878d274ca856ae41bd01"
 verdict: "approve"
 ---
 
 # Gate review: fix/node-24.22.1 (10-27-26)
 
 ## Scope
-Branch fix/node-24.22.1, range 641427039a6c12212db151c1142712426f30ebd5..1530dfc91418d1093416348dc2ea4ce7ab4abb07, gate slice. The wave bumps Node to 24.22.1 for Node2Shell (CVE-2026-111497): .nvmrc, engines floor `>=24.22.1 <25`, both Dockerfile stages by digest, kept in step by scripts/ci/node-pins.test.ts. It ignores GHSA-mrhx-c7xc-m3w5 (zod 3 under Expo CLI) and GHSA-gcqx-w48m-w2h4 (deepmerge under Expo config), tracked on #846, and runs the CI dependency review step only on public repos (developer decision 10-27-26, ADR-0007 amendment), pinned by scripts/ci/ci-workflow.test.ts.
+Branch fix/node-24.22.1, range 641427039a6c12212db151c1142712426f30ebd5..e4aa37814260df1236c0878d274ca856ae41bd01, gate slice: package.json, pnpm-workspace.yaml, scripts/ci/node-pins.test.ts, scripts/ci/ci-workflow.test.ts, .github/workflows/ci.yml. The wave bumps Node to 24.22.1 for Node2Shell (CVE-2026-111497) across .nvmrc, engines and both Dockerfile stages with a pin test; ignores GHSA-mrhx-c7xc-m3w5 and GHSA-gcqx-w48m-w2h4 (Expo tooling only, #846); runs dependency review on public repos only while the repo is private, with pnpm audit --prod and the lockfile checks unconditional.
 
 ## Findings summary
-Critical 0, important 0, minor 1. No ledger or controller rulings contested.
+Critical 0, important 0, minor 1. Round 3 G-M1 (ci.yml comment and ADR-0007 on the dev-dependency gap) is fixed at e4aa378. Developer decisions 10-27-26 (private repo, the two ignored GHSAs) kept as stand.
 
 ## Cross-cutting checks
-- Node pins in step: .nvmrc, deploy/Dockerfile FROM lines and engines all name 24.22.1; same digest in both stages.
-- ADR coverage: ADR-0001 and ADR-0007 carry 10-27-26 amendments for the pin and the private-repo condition.
-- Workflow Node source: every workflow setup uses node-version-file .nvmrc.
+- Pin drift: .nvmrc 24.22.1 and both deploy/Dockerfile FROM lines match the digest the test expects.
+- Hard-coded Node in workflows: every setup-node in .github/workflows uses node-version-file .nvmrc.
 
-## Answers to the controller's questions
-None asked.
+## Answers
+No controller questions.
 
 ## Remaining Minors
-- M1 .github/workflows/ci.yml:107-108 and the ADR-0007 amendment say `pnpm audit --prod` fails on any advisory and is stricter than dependency review; `--prod` skips devDependencies, so dev-only advisories go unchecked while the repo is private. Reword, or add a dev-dependency audit.
+- .github/workflows/ci.yml:106: comment says the audit fails on any runtime-dependency advisory; strictly any advisory not in auditConfig.ignoreGhsas.
