@@ -69,3 +69,9 @@ Context: run data from M0 to M1 P3 showed the Opus critic found the real defects
 - **Unchanged:** the per-PR tier reviews (`wave-review`, critical Opus high, gate Opus medium), the ruler's triggers (implementer concerns, contested, plan-mandated and needs-judgment items), the fix-diff-scoped re-reviewer, the progress checker, verifyHead, the gates, caps never raised.
 - **Not done:** folding the progress checker into the re-reviewer. It is the cheapest role (Sonnet low) and feeds the head, test-count and gate-weakening checks; the fold would cost more than it saves.
 - Consequence: a clean task is 4 agents on every tier (gate was 5, critical 6); an ordinary task stops after one fix round.
+
+## Amendment 10-27-26: dependency review on a private repository
+
+- The repository is private for now. `actions/dependency-review-action` needs GitHub Advanced Security on a private repository, which a personal account cannot buy, so the step runs only when `github.event.repository.private` is false. `scripts/ci/ci-workflow.test.ts` pins the condition.
+- `pnpm audit --prod` and the lockfile registry check still run on every change and stand in for a review on `[deps]`-tier changes; the audit fails on any runtime-dependency advisory not in `auditConfig.ignoreGhsas`, a stricter level than the dependency review's moderate. `--prod` leaves out devDependencies, which the dependency review covered, so a dev-only advisory in a `[deps]` PR goes unchecked while the repository is private.
+- When the repository is public again the step runs with no change.

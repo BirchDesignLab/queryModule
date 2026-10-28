@@ -27,3 +27,11 @@ auditConfig:
     # apps/mobile > react-native > metro > micromatch (build tooling; API and web do not use
     # it). This one ID only; remove with #492 once braces > 3.0.3 ships.
     - GHSA-vfj7-8cjw-p6xm
+    # GHSA-mrhx-c7xc-m3w5: zod <4.6.6, no patched 3.x (10-27-26). Only vulnerable path is
+    # apps/mobile > expo > @expo/cli > zod@3 (dev tooling; API and web use patched zod 4). This
+    # one ID only; remove with #846 once @expo/cli takes zod >= 4.6.6.
+    - GHSA-mrhx-c7xc-m3w5
+    # GHSA-gcqx-w48m-w2h4: deepmerge 4.2.0 to 4.3.1, low, no patched version (10-27-26). Only
+    # paths are apps/mobile > expo > @expo/config (and @expo/cli, @expo/prebuild-config under it;
+    # dev tooling; API and web do not use it). This one ID only; remove with #846 once patched.
+    - GHSA-gcqx-w48m-w2h4

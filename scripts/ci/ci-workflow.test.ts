@@ -147,6 +147,17 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(checkout.with["fetch-depth"]).toBe(0);
   });
 
+  it("dependency review runs on public pull requests only: private repos need GitHub Advanced Security (10-27-26)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: same as above
+    const step = jobs.checks.steps.find((s: any) => s.name === "Dependency review");
+    expect(step?.if).toBe(
+      "github.event_name == 'pull_request' && !github.event.repository.private",
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: same as above
+    const audit = jobs.checks.steps.find((s: any) => s.name === "Audit runtime dependencies");
+    expect(audit?.if).toBeUndefined();
+  });
+
   it("`web` and `mobile` jobs need `checks`", () => {
     expect(jobNeeds(jobs.web)).toContain("checks");
     expect(jobNeeds(jobs.mobile)).toContain("checks");
@@ -208,11 +219,14 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
     expect(aggregate({ ...docsOnly, board: { result: "success", outputs: {} } })).toBe(0);
   });
 
-  it("caps timeouts: changes and ci at most 5 minutes, image and each e2e shard at most 35, every other job at most 20", () => {
+  it("caps timeouts: changes and ci at most 5 minutes, image, each e2e shard and test at most 35, every other job at most 20", () => {
+    // test: 35 since 10-27-26; a private repo's 2-vCPU runner takes about 20 to 25 minutes.
+    const long = new Set(["image", "e2e", "test"]);
     for (const id of jobIds) {
-      const cap = id === "changes" || id === "ci" ? 5 : id === "image" || id === "e2e" ? 35 : 20;
+      const cap = id === "changes" || id === "ci" ? 5 : long.has(id) ? 35 : 20;
       expect(jobs[id]["timeout-minutes"], id).toBeLessThanOrEqual(cap);
     }
+    expect(jobs.test["timeout-minutes"]).toBe(35);
   });
 
   it("`web` and `mobile` also need `changes`", () => {
