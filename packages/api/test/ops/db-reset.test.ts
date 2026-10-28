@@ -337,12 +337,18 @@ describe("#821 db:reset guards (ADR-0016)", () => {
 
   it("a rerun in the same second refuses rather than overwrite the earlier backup (#829, ruling 10-20-26)", async () => {
     const s = await seededSite();
-    const stamp = new Date(s.clock.now()).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "Z");
+    // A frozen clock: the site clock follows real time, and on a slow runner the reset's own stamp
+    // (taken after it opens the database) fell into the next second (PR #847 CI, 10-27-26).
+    const at = s.clock.now();
+    const stamp = new Date(at).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "Z");
     const earlier = join(s.backupRoot, `db-reset-${stamp}`);
     mkdirSync(earlier);
     writeFileSync(join(earlier, "manifest.json"), "{}");
     const before = await s.snapshot();
-    const code = await runDbReset(["--confirm", "default"], await s.opts());
+    const code = await runDbReset(
+      ["--confirm", "default"],
+      await s.opts({ clock: { now: () => at } }),
+    );
     expect(code).toBe(1);
     expect(s.err.join("")).toContain(`db-reset refused: the backup directory ${earlier} exists`);
     expect(await s.snapshot()).toEqual(before);
