@@ -147,6 +147,17 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(checkout.with["fetch-depth"]).toBe(0);
   });
 
+  it("dependency review runs on public pull requests only: private repos need GitHub Advanced Security (10-27-26)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: same as above
+    const step = jobs.checks.steps.find((s: any) => s.name === "Dependency review");
+    expect(step?.if).toBe(
+      "github.event_name == 'pull_request' && !github.event.repository.private",
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: same as above
+    const audit = jobs.checks.steps.find((s: any) => s.name === "Audit runtime dependencies");
+    expect(audit?.if).toBeUndefined();
+  });
+
   it("`web` and `mobile` jobs need `checks`", () => {
     expect(jobNeeds(jobs.web)).toContain("checks");
     expect(jobNeeds(jobs.mobile)).toContain("checks");
