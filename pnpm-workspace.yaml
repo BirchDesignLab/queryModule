@@ -19,10 +19,14 @@ overrides:
   "@esbuild-kit/core-utils>esbuild": "^0.28.2"
 auditConfig:
   ignoreGhsas:
-    # GHSA-86w9-cpqp-85rv: node-forge <=1.4.0, no patched version (10-02-26). Only path is
-    # apps/mobile > expo > @expo/cli (dev tooling; API and web do not use it). This one ID
-    # only; remove with #492 once node-forge > 1.4.0 ships or Expo drops it.
-    - GHSA-86w9-cpqp-85rv
+    # GHSA-3g3m-2fjr-6pw4: glob >=9 <=14.0.1, patched only in 14.0.2 (11-06-26). All paths are
+    # apps/mobile > expo > @expo/* (tooling; API and web do not use it). Newest @expo/cli and
+    # @expo/fingerprint still take glob ^13. This one ID only; remove with #492 once they allow it.
+    - GHSA-3g3m-2fjr-6pw4
+    # GHSA-g3hv-75wg-m249: minimatch >=7 <11.0.1, patched only in 11.x (11-06-26). All paths are
+    # apps/mobile > expo > @expo/* (directly or via glob 13; API and web do not use it). Newest
+    # @expo/fingerprint still takes minimatch ^10. This one ID only; remove with #492 once it allows it.
+    - GHSA-g3hv-75wg-m249
     # GHSA-vfj7-8cjw-p6xm: braces <=3.0.3, no patched version (10-02-26). Only path is
     # apps/mobile > react-native > metro > micromatch (build tooling; API and web do not use
     # it). This one ID only; remove with #492 once braces > 3.0.3 ships.
