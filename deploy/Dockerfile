@@ -1,6 +1,6 @@
 # deploy/Dockerfile  (build context: repo root)
 # syntax=docker/dockerfile:1.7
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS build
 WORKDIR /repo
 RUN corepack enable
 COPY . .
@@ -12,7 +12,7 @@ RUN mkdir -p /prod/config \
  && cp -r packages/config/sites packages/config/locales /prod/config/ \
  && if [ -d packages/config/mock ]; then cp -r packages/config/mock /prod/config/; fi
 
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runtime
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS runtime
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data SECRETS_DIR=/run/secrets
 RUN addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app app \
  && mkdir -p /data && chown 10001:10001 /data
