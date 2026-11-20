@@ -316,8 +316,8 @@ importers:
   packages/api:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.1.5
-        version: 2.1.5(hono@4.13.13)
+        specifier: ^2.1.9
+        version: 2.1.9(hono@4.13.19)
       '@libsql/client':
         specifier: ^0.18.0
         version: 0.18.0
@@ -331,8 +331,8 @@ importers:
         specifier: ^0.45.4
         version: 0.45.4(@libsql/client@0.18.0)(kysely@0.29.6)
       hono:
-        specifier: ^4.13.13
-        version: 4.13.13
+        specifier: ^4.13.19
+        version: 4.13.19
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -1522,8 +1522,8 @@ packages:
     resolution: {integrity: sha512-EbxYllZ7/ozONVZd425cm4XnolfW+AmSFT5aP7Jdno6oc3WrYQcHz2CO20z/2rwWwYgztmV2PXvYH+BQ8YFjqg==}
     hasBin: true
 
-  '@hono/node-server@2.1.5':
-    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+  '@hono/node-server@2.1.9':
+    resolution: {integrity: sha512-Sk4NQd3GFY0WZWCzndwFMPwJhtD0y9qjsQ+pjID0/03nK9pxyBCUoUHCho8QYBLBVhi0ssL8UkNPHqbgSOFPIQ==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4 || ^5.0.0-0
@@ -3048,8 +3048,8 @@ packages:
   hermes-parser@0.36.1:
     resolution: {integrity: sha512-GApNk4zLHi2UWoWZZkx7LNCOSzLSc5lB55pZ/PhK7ycFeg7u5LcF88p/WbpIi1XUDtE0MpHE3uRR3u3KB7TjSQ==}
 
-  hono@4.13.13:
-    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
+  hono@4.13.19:
+    resolution: {integrity: sha512-KmXvQAXwcAHV+muzbIwoJ23niEB5nMoDVr9WcRkU8mvjUECm/1+7v4Jgp7P7a+H6MLFrh+vXrGonGrGS+RQfkA==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@7.0.2:
@@ -5472,9 +5472,9 @@ snapshots:
       chalk: 4.1.2
       js-yaml: 4.3.2
 
-  '@hono/node-server@2.1.5(hono@4.13.13)':
+  '@hono/node-server@2.1.9(hono@4.13.19)':
     dependencies:
-      hono: 4.13.13
+      hono: 4.13.19
 
   '@inquirer/ansi@2.0.8': {}
 
@@ -6802,7 +6802,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.36.1
 
-  hono@4.13.13: {}
+  hono@4.13.19: {}
 
   hosted-git-info@7.0.2:
     dependencies:
