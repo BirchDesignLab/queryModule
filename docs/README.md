@@ -7,6 +7,49 @@ built to the standard a real connection and use would demand: encryption in tran
 complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
 state-system credentials comes in M3.
 
+## Pick your path
+
+<table>
+<tr>
+<td width="25%" valign="top">
+
+**👀 Seeing it run**
+
+1. [Overview](overview.md)
+2. [Demo guide](demo.md): accounts and nine one-command stories
+3. [Roadmap](roadmap.md)
+
+</td>
+<td width="25%" valign="top">
+
+**🛠️ Running a site**
+
+1. [Site configuration](site-config.md)
+2. [Builder walkthrough](demo.md#builder-cards-keywords-and-try-a-match)
+3. [Deploying](deploy.md)
+
+</td>
+<td width="25%" valign="top">
+
+**🔌 Integrating**
+
+1. [API reference](api.md): try it with curl
+2. [Architecture](architecture.md)
+3. [Security](../SECURITY.md)
+
+</td>
+<td width="25%" valign="top">
+
+**🧑‍💻 Contributing**
+
+1. [Getting started](getting-started.md)
+2. [Architecture](architecture.md)
+3. [Contributing](../CONTRIBUTING.md)
+
+</td>
+</tr>
+</table>
+
 ## Start here
 
 | Document | What it covers |

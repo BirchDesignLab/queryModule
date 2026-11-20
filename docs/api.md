@@ -12,6 +12,63 @@ is missing from this page (decision D-A18).
 Mock data only. The prototype never connects to real state or national systems. The examples below
 use placeholder values.
 
+## At a glance
+
+One query is one `POST`, answered at once, then one WebSocket frame per source as each answer is
+stored. The frame says *which* result changed; the client reads the result over HTTP, so a payload
+never rides on the socket.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as API
+    participant S as Sources (mock)
+    C->>A: POST /auth/sign-in/email
+    A-->>C: session cookie
+    C->>A: GET /meta
+    A-->>C: configHash
+    C->>A: GET /ws (upgrade), then hello { lastSeq }
+    A-->>C: welcome { latestSeq }, then any missed frames (replay)
+    C->>A: POST /queries + Idempotency-Key
+    A-->>C: 202 correlationId, Server-Timing: ack
+    par each source, with its own deadline
+        A->>S: query
+        S-->>A: answer, failure or timeout
+    end
+    A-->>C: sourceStatus { seq, correlationId, sourceId, status }
+    C->>A: GET /queries/{correlationId}
+    A-->>C: parts, results and mapped cards
+```
+
+### Try it with curl
+
+Against a local `pnpm dev` (the API listens on port 3000; the seed prints the demo passwords on
+first run). Plate `ZZ-0001` with year `26` is demo story 1: `STOLEN` on both mock sources.
+
+```bash
+BASE=http://localhost:3000/api/v1
+
+# 1. Sign in; the session cookie goes to ./jar
+curl -s -c jar -H 'Content-Type: application/json' \
+  -d '{"email":"dispatcher@example.test","password":"<from the seed output>"}' \
+  "$BASE/auth/sign-in/email"
+
+# 2. The hash of the live config, which every submit must carry
+HASH=$(curl -s -b jar "$BASE/meta" | jq -r .configHash)
+
+# 3. Submit: 202 with a correlationId (the X-Requested-With header is required)
+curl -s -b jar -H 'Content-Type: application/json' -H 'X-Requested-With: querymodule' \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d "{\"queryType\":\"VEH\",\"values\":{\"plate\":\"ZZ-0001\",\"year\":\"26\"},
+       \"sourceIds\":[\"stateSource\",\"nationalSource\"],\"mode\":\"normal\",
+       \"configHash\":\"$HASH\"}" \
+  "$BASE/queries"
+
+# 4. Read the request and its results (repeat until no source is pending)
+curl -s -b jar "$BASE/queries/<correlationId from step 3>" | jq
+```
+
 ## Conventions
 
 - **Base path.** `/api/v1`. Every route below is under it.

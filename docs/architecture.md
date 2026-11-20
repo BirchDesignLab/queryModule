@@ -96,6 +96,86 @@ sequenceDiagram
    with its payloads; each of those reads writes its own audit row (`auditViewed`, `auditExported`,
    `adminViewed`) before anything is returned.
 
+## A source's life
+
+Every source in a request settles exactly once, and the stored outcome is never rewritten:
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: submit commits (202)
+    pending --> returned: answer stored
+    pending --> failed: the source reported an error
+    pending --> timedOut: its deadline passed
+    pending --> credentialsRejected: the source refused the credentials
+    pending --> credentialsMissing: no credentials for this source
+    pending --> interrupted: the server restarted mid-dispatch
+    returned --> [*]
+    failed --> [*]
+    timedOut --> [*]
+    credentialsRejected --> [*]
+    credentialsMissing --> [*]
+    interrupted --> [*]
+```
+
+The mock adapter produces errors, timeouts and rejected credentials from its scenarios. The
+dispatcher itself settles a source `credentialsMissing`, without calling it, when the source needs
+credentials and the user has none set; per-user source credentials arrive in M3.
+
+## What is stored
+
+The main tables in the encrypted SQLite file (`packages/api/src/db/schema.ts`). Query values and
+source payloads are encrypted under a data key of their own request, so deleting that one key
+shreds exactly that request; audit rows are append-only, enforced by triggers.
+
+```mermaid
+erDiagram
+    user ||--o{ session : "signs in"
+    user ||--o{ query_request : submits
+    query_request ||--|{ source_result : "one per source"
+    query_request ||--|| request_key : "encrypted under"
+    query_request ||--o{ audit_event : "recorded by"
+    source_result ||--o{ event_log : "replayable as"
+    user ||--o{ site_config_version : publishes
+    query_request {
+        text correlationId
+        text partId
+        text queryType
+        blob valuesCiphertext
+        text configHash
+        text idempotencyKey
+    }
+    source_result {
+        text resultId
+        text sourceId
+        text status
+        blob payloadCiphertext
+        text errorCode
+    }
+    request_key {
+        text correlationId
+        blob wrappedDek
+        int keyVersion
+    }
+    audit_event {
+        text type
+        text at
+        text actorUserId
+        text correlationId
+        text details
+    }
+    event_log {
+        int seq
+        text type
+        text status
+    }
+    site_config_version {
+        int version
+        text status
+        text configHash
+        text note
+    }
+```
+
 ## Packages and apps
 
 | Path | Role | State |

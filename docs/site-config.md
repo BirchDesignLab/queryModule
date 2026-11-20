@@ -7,6 +7,40 @@ describe it.
 Mock data only. The prototype uses a mock data source with canned responses and never connects to
 real state or national systems. Every value below is a placeholder such as `ABC123` or `ZZ-0001`.
 
+## At a glance
+
+One validated JSON document per site drives every screen. Each group of keys below lands in a
+different part of the app; the admin builder edits all of it and publishes a new version that
+reaches open screens at their next config refresh.
+
+```mermaid
+flowchart LR
+    doc[["site config<br/>one JSON document"]]
+    doc --> form["queryTypes · picklists · defaults<br/>quickAccess"]
+    doc --> term["commands · terminal"]
+    doc --> src["sources<br/>(mock adapter today)"]
+    doc --> res["responseMappings · keywords<br/>keywordSeverityStyles"]
+    doc --> look["theme · personas · shortcuts · locales"]
+    doc --> srv["auth · retention · delegation<br/>(server only)"]
+    form --> F(["The query form<br/>fields, rules, sources"])
+    term --> T(["The command terminal<br/>VEH.ZZ-0001..26"])
+    src --> D(["Dispatch<br/>per-source deadlines"])
+    res --> C(["Result cards<br/>keyword marks, severity"])
+    look --> L(["Layout, themes,<br/>keyboard"])
+    srv --> S(["Session limits,<br/>data retention"])
+```
+
+A small change, end to end: this keyword entry
+
+```json
+{ "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] }
+```
+
+marks `STOLEN` in every answer, raises the card and the request to critical, and leaves
+"NOT STOLEN" alone. The builder shows the effect live, in the same renderer dispatchers see:
+
+<img alt="The admin builder's Keywords and severity editor: a sample line with STOLEN, WANTED and MISSING marked critical, EXPIRED as a warning and NO RECORD as info, the STOLEN keyword with its two exceptions, and a card preview for plate ZZ-0001 showing STOLEN marked critical" src="assets/shots/builder-keywords.png">
+
 ## Where config comes from
 
 One site config document describes one site. It reaches the server in two steps (ADR-0011):
@@ -509,6 +543,9 @@ text } }`, laid over the bundled file. The admin builder edits it.
 
 ## Mock files
 
+
+<img alt="Try a match in the admin builder: plate ZZ-0001 typed against the State system's Vehicle mock responses; the pane names the scenario that answers and shows the result card dispatchers would see" src="assets/shots/builder-try-a-match.png">
+
 A site with a `mock` source needs `packages/config/mock/<siteId>.json` while
 `ALLOW_MOCK_SOURCES=true`. The file is:
 
@@ -668,6 +705,11 @@ the current version. The server also migrates in memory at start, logging a warn
 not validate fails CI.
 
 ## The admin builder and the config store
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/builder-night.png">
+  <img alt="The admin site configuration builder: the tree of query types and result cards, the Vehicle card editor with Which card wins, and the live card preview" src="assets/shots/builder-day.png">
+</picture>
 
 The admin console at `/admin` edits and publishes the live config (ADR-0011). It is lazy-loaded and
 shown only to the `admin` and `implementer` roles, behind the `adminConfig` feature. The `admin`
