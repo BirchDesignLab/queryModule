@@ -49,10 +49,10 @@ code disagree, the code and the newest decision record win.
 | [superpowers/plans](superpowers/plans/) | The implementation master plan, one plan per phase and track, and [STATUS.md](superpowers/plans/STATUS.md), the live phase grid |
 | [decisions](decisions/) | Architecture decision records (ADRs); each changes the spec or settles a choice it left open |
 | [handoffs](handoffs/) | One dated file per session handoff (state, branch, rulings it depends on, next step) |
-| [releases](releases/) | One release note per milestone exit and per promoted phase |
+| [releases](releases/) | One release note per milestone exit and per promoted phase, plus the resolved site configs captured at the M0 and M1 exits (`m0/`, `m1/`) |
 | [reviews](reviews/) | Review artifacts for pull requests that touch sensitive paths |
 | [design](design/) | The visual system and design notes |
-| [briefs](briefs/) | The design brief (HTML source, PDF, screenshots) |
+| [briefs](briefs/) | The design brief (HTML source, PDF, screenshots) and the Birch Design Lab logo (`brand/`) |
 | [retros](retros/) | Retrospectives on the process |
 | [board](board/) | `board-data.json`, the project board's data (read by `scripts/ops/gh-setup-project.mjs`) |
 | [testing](testing/) | `stories.json`, the map from story IDs to their tests (read by CI); the M2 security and accessibility maps; the NVDA with Chrome script for the M2 exit ([nvda-m2.md](testing/nvda-m2.md)) |

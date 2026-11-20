@@ -13,7 +13,7 @@ effort for every agent, are in [CLAUDE.md](CLAUDE.md).
 
 ```
 Milestone (M0 to M4, plus Later)
-  > Phase (P0 to P3 inside a milestone)
+  > Phase (P0 to P3 inside a milestone; M2 also has P0.5, ADR-0012)
     > Track (A platform, B web, Core, D mobile from M4): one phase plan per track
       > Wave (one pull request: a run of consecutive tasks from one plan)
         > Task (one GitHub issue, built with tests first)
@@ -24,7 +24,8 @@ Milestone (M0 to M4, plus Later)
 - **Phases.** P0 is contracts: schema, route, event and audit shapes land first and are frozen at the
   P0 gate. After the gate a contract changes only through the contract procedure (master plan 8), one
   change per pull request; audit details are additive only. Each phase ends at a gate verified on `main`;
-  a phase can be promoted to the live demo without a milestone tag (M2 P0.5 and P1 were).
+  a phase can be promoted to the live demo without a milestone tag (M2 P0.5 at 3e85c2b and M2 P2 on
+  10-19-26, #732; M2 P1 was promoted on its own after its gate, #606).
 - **Tracks** split ownership: A owns `packages/api`, `deploy/` and the ops, CI and mock-data scripts;
   B owns `apps/web`, `packages/web-ui`, `packages/tokens` and `packages/client`; Core owns
   `packages/core`, the sites, locales and schema in `packages/config`, and `docs/testing/stories.json`; D will own the mobile app and
@@ -55,7 +56,29 @@ Milestone (M0 to M4, plus Later)
 - Every change is on a short-lived branch with a pull request; nothing is committed to `main`
   directly. One pull request per wave.
 - The developer approves every push and merges every pull request.
-- A pull request closes each issue it finishes with its own `Closes #n` line.
+- A pull request closes each issue it finishes with its own `Closes #n` line: one keyword per issue
+  ("Closes #1, #2" closes only #1).
+- **Split fixes by tier.** An ordinary fix gets its own pull request and merges on CI. Gate-tier
+  chores ride the next wave pull request; critical-tier work gets its own or rides a critical wave.
+  The pull request's tier decides the review, not who implemented it.
+- **Review before the PR.** Run `wave-review` with the branch key before pushing, so
+  `sensitive-review` is never red. Freeze a PR's scope before its review starts; later work goes in
+  the next PR.
+- **Dependabot.** Version-only bumps are the deps tier (automated checks only);
+  `.github/dependabot.yml` itself is gate.
+
+## Sessions and records
+
+Detail is in [CLAUDE.md](CLAUDE.md); in short:
+
+- **Roles.** Planning sessions write plans, lane sessions implement them, and the manager session
+  briefs lanes, rules on their questions and approves their pushes. The developer merges every PR.
+- **Local runs.** Test runs set `VITEST_MAX_WORKERS=3`; parallel lanes use distinct `E2E_PORT` values.
+- **No in-app browser pane.** Sessions verify with scripts, headless Playwright, e2e and screenshots
+  read as files.
+- **Where records go.** Decisions in ADRs (`docs/decisions/`); open choices as `decision` issues;
+  rulings as "Ruling:" comments, or a plan's Rulings section for a phase; one new dated file per
+  handoff in `docs/handoffs/`, never appended to; working scratch in `.superpowers/sdd/` (ignored).
 
 ## Running tasks with workflows (ADR-0006)
 

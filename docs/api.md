@@ -1,6 +1,6 @@
 # API reference
 
-The HTTP and WebSocket contract of the Query Module API, as of M2 P1 (BR-005).
+The HTTP and WebSocket contract of the Query Module API, as of M2 P3 (BR-005).
 
 This page is written by hand. The source of truth is
 [`packages/api/openapi.json`](../packages/api/openapi.json), which is generated from the route
@@ -18,8 +18,9 @@ use placeholder values.
 - **Sessions.** A signed-in browser holds a session cookie set by the auth routes. "Session" in the
   table means a live session; "public" means no session. A native client may send
   `Authorization: Bearer` on the WebSocket upgrade (see "WebSocket").
-- **`X-Requested-With: querymodule`.** Required on every state-changing request (POST, PUT, DELETE)
-  except the Better Auth sign-in routes. Without it the answer is `403 forbidden`. GET requests do
+- **`X-Requested-With: querymodule`.** Required on every state-changing request (POST, PUT, PATCH, DELETE)
+  except Better Auth's own routes under `/api/v1/auth/` (sign-in and the like, which rely on Better
+  Auth's origin check). Sign-out, change-password and `/auth/embedded` are not exempt. Without it the answer is `403 forbidden`. GET requests do
   not need it. (Spec 5.9.)
 - **`Origin`.** A request whose `Origin` header is present and not one of the site's allowed
   origins (`CORS_ORIGINS`, default the public origin; the dev origins in development) is refused
@@ -30,6 +31,12 @@ use placeholder values.
 - **Body cap.** 32 KiB for every route, `413 payloadTooLarge` above it. The admin draft save and
   validate routes take up to 256 KiB, because a whole config document can pass 32 KiB.
 - **No cache.** Every `/api/*` response carries `Cache-Control: no-store`.
+- **Security headers.** Every response carries `Strict-Transport-Security: max-age=31536000`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Permissions-Policy:
+  camera=(), microphone=(), geolocation=()`.
+- **CORS.** Allowed origins are `CORS_ORIGINS`, with credentials. Allowed methods are GET, POST,
+  PUT and DELETE; allowed request headers are `Content-Type`, `X-Requested-With`,
+  `Idempotency-Key`, `Authorization` and `X-Background`.
 - **Errors.** Every non-2xx answer that carries a body uses the `ApiError` shape (below).
 - **Feature gates.** The admin routes sit behind site features (`adminConfig`, `adminUsers`, and
   `adminAudit` for the audit log, its export and the admin request view). With the feature off the
@@ -50,9 +57,10 @@ Access levels:
 | sessionOwn | any signed-in user, for their own row only |
 | configEditor | `admin` or `implementer` |
 | admin | `admin` only |
+| policy | the route's access policy decides; for `GET /queries/{correlationId}`, the owner only |
 
 "X-Requested-With" is `yes` when the header is required. "Status" is the route contract's status:
-`live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until its phase lands (the admin audit and admin query routes, M2 P2).
+`live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until its phase lands. Every route is `live` today.
 The status cell follows the `status` field of the route contract (`routes.ts`).
 
 | Method | Path | Access | X-Requested-With | Status | Responses |
@@ -118,9 +126,11 @@ What each route does:
 The auth routes are under `/api/v1/auth/` and are not part of `openapi.json`. The ones the web app
 uses are `POST /auth/sign-in/email`, `POST /auth/sign-out`, `GET /auth/get-session` and
 `POST /auth/change-password`. Sign-out and change-password need `X-Requested-With: querymodule`.
-Sign-in is rate limited per account and per client address (see the demo runbook, "If something goes
-wrong"). Change-password also counts wrong `currentPassword` values per user: after 5 in 15 minutes it
-answers `429 rateLimited` with `Retry-After` until the window passes. Sign-in is not affected, and a
+Only these paths are served; any other path under `/api/v1/auth/` answers `404 notFound`, and so
+does every auth route when the site's `identityModes` lacks `standalone`.
+Sign-in is rate limited: 10 failed sign-ins for one account lock it for 15 minutes, and a client
+address may make 100 auth requests per 15 minutes. Change-password also counts wrong `currentPassword` values per user: after 5 in 15 minutes it
+locks change-password for 15 minutes: `429 rateLimited` with `Retry-After` until then. Sign-in is not affected, and a
 success clears the count. Authentication is by session cookie; there are no tokens in query strings.
 
 ### Submitting a query
@@ -292,7 +302,7 @@ field values, decrypted for this response only) and, in every source whose `stat
 - The access policy lets the owner through and nobody else. Another user's request, an admin's
   view of it, an unknown id and a malformed id all answer the same `404 notFound`, never `403`,
   so a probe learns nothing. (`openapi.json` also lists `400` for a malformed id; the handler
-  answers `404` for it.) The admin read is a separate, planned route.
+  answers `404` for it.) The admin read is a separate route, `GET /admin/queries/{correlationId}` (see the table above).
 - A request whose encryption scope was shredded (the lost-key procedure) answers `purged: true` on
   the part or result that held sealed data, with no `values` on the part and no `payload` on the
   result. The rest of the request still reads.
@@ -398,7 +408,8 @@ One socket per signed-in client at `GET /api/v1/ws` (upgrade). Messages are JSON
 with `"v": 1` (the protocol version) and a `type`. Frames over 4096 bytes close the socket.
 
 **Upgrade checks**, cheapest first, before any socket exists: the path must be exactly
-`/api/v1/ws` with no query string (`400` otherwise, so no token ever rides in a URL); at most 60
+`/api/v1/ws` (`404` otherwise); while the server drains, `503`; no query string (`400`, so no
+token ever rides in a URL); at most 60
 upgrades per client address per 60 seconds (`429` with `Retry-After`; the deploy env may set
 `WS_UPGRADE_LIMIT` and `WS_UPGRADE_WINDOW_MS`, defaults 60 and 60000); the `Origin` must be the site's
 own (`403`), or absent with an `Authorization: Bearer` header; a live session (`401`); and no
@@ -472,4 +483,8 @@ still `pending` as `interrupted` (one `interrupted` audit row, whose details car
 `503`, refuses new upgrades, stops listening and waits up to 2 s for in-flight HTTP, stops dispatch intake, then lets in-flight dispatch finish up to the
 latest outstanding source deadline plus 5 s, and only then closes the sockets and the database.
 A source still `pending` after that stays so until the next start's sweep marks it `interrupted`.
+
+**Periodic sweeper.** While the server runs, a sweeper ticks every 60 seconds: it ends sessions
+past their idle or absolute limit and closes their sockets with 4001, and once an hour it prunes
+`event_log` rows past their retention.
 Size `stop_grace_period` from that bound: [deploy.md](deploy.md) has the 18 s `timeoutMs` note.

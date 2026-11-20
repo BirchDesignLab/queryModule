@@ -48,10 +48,16 @@ flowchart TB
     end
     client -- "REST + wss" --> api
     client --> core
+    webui --> core
     webui --> tokens
+    web --> core
     api --> core
-    api --> config
+    api -- "contrast checks" --> tokens
+    api -. "reads site and mock files" .-> config
 ```
+
+Solid arrows are package imports; the dotted arrow is a file read at startup. `apps/web` also
+imports `packages/tokens` and `packages/config` directly for a few constants.
 
 ## One query, end to end
 
@@ -110,8 +116,8 @@ sequenceDiagram
 | Path | Role |
 |---|---|
 | `deploy/` | `Dockerfile`, `compose.yml` (the app and its Cloudflare Tunnel service), `.env.example`, and systemd units for the deploy pull and the backup. See [deploying](deploy.md). |
-| `scripts/ci` | CI gates: contract and client generators, config validation, license check, story tags, sensitive-review check, migration and schema-write checks |
-| `scripts/ops` | Ops scripts: seed, smoke, backup, restore test, deploy pull, lost-key runbooks, roles, sign-in and acknowledgment stats, GitHub board setup |
+| `scripts/ci` | CI gates: contract, token and client generators, OpenAPI build and diff, config validation and migration, license check, lockfile guard, core-purity and barrel checks, story tags, sensitive-review check, migration and schema-write checks, the boot smoke |
+| `scripts/ops` | Ops scripts: seed, demo users, smoke, database reset, config import, backup, restore test, deploy pull, lost-key runbooks, trigger check, roles, sign-in, acknowledgment and audit stats, WebSocket soak, GitHub board setup |
 | `scripts/dev` | Dev server, end-to-end launcher, local smoke, demo seed |
 | `scripts/mock-data` | Generates the mock files under the fixture policy ([README](../scripts/mock-data/README.md)) |
 | `scripts/sdd` | Task briefs, ledger append and the test harness for the saved workflows |
