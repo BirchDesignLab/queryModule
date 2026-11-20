@@ -49,6 +49,7 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 | A `Secret` type keeps secret values out of logs, errors and serialized output | Built |
 | Encrypted storage for users' state-system credentials: entry, change (rotation by the user) and deletion, stored encrypted under `CREDENTIAL_KEY` with a key version, behind step-up authentication. No credential is stored today | Planned, M3 P1 |
 | A procedure to rotate `CREDENTIAL_KEY` itself | Outside this design (a key version is recorded; no rotation procedure is built) |
+| Lost-key runbooks (`scripts/ops/lost-data-key.ts`, `scripts/ops/lost-key.ts`): each needs `--confirm-offline-copy-lost`, checks the audit triggers, and rewrites the canary under a new key. A lost `DATA_KEY` also deletes every request key (crypto-shredding the stored values and audits it); a lost `CREDENTIAL_KEY` never touches request data | Built |
 | Encrypted nightly backups with an offline key, and a restore test at each milestone exit | Built ([deploying](docs/deploy.md)) |
 
 ### Audit trail
@@ -57,7 +58,8 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 |---|---|
 | Every submit, dispatch, source response, sign-in, admin change and config publish writes an audit row | Built |
 | Audit rows are append-only: database triggers refuse any update, delete or replace, and CI checks every migration and schema write | Built |
-| Admin audit viewer with paging and export; viewing the audit is itself audited | Planned, M2 P2 |
+| Admin audit viewer with paging and export; viewing the audit is itself audited (the view and the export each commit their audit row before any data is returned, and fail closed) | Built |
+| Audit and query triggers are checked at server startup and before the ops scripts; an altered trigger blocks serving | Built |
 | Audit of delete from view and of delegated-credential use | Planned, M3 |
 | Audit hash chain | Later, not scheduled |
 
@@ -68,11 +70,13 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 | Email and password sign-in, with a minimum password length and a forced change of an admin-set temporary password | Built |
 | Session limits: 30 minutes idle and 12 hours absolute by default, set per site | Built |
 | Auth rate limits: an account locks for 15 minutes after 10 failures in 15 minutes; 100 requests per IP per 15 minutes | Built |
+| Change-password rate limit: 5 wrong current passwords in 15 minutes lock change-password for that user for 15 minutes | Built |
+| Security headers on responses: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a `Permissions-Policy` that turns camera, microphone and geolocation off | Built |
 | A required `X-Requested-With` header on state-changing requests, an Origin allowlist on every REST route (a present, foreign Origin is refused 403, sign-in included; a missing Origin passes), and an Origin allowlist on the WebSocket upgrade | Built |
 | A strict Content Security Policy with per-request nonces, `frame-ancestors 'none'`, a 32 KiB body cap (larger for admin config documents, ADR-0011) and `no-store` on every API response | Built |
 | Role-based access (user, training officer, implementer, admin) checked by a route-by-caller test matrix | Built |
 | A query's results are visible only to its owner | Built |
-| Admins can read any request, and each read is audited | Planned, M2 P2 |
+| Admins can read any request, and each read is audited (the audit row commits before any value is decrypted; a failed write answers 500) | Built |
 | TOTP multi-factor sign-in and step-up | Planned, M3 P1 |
 | Delegation: a training officer approves a trainee's queries, with a code, fresh authentication and revocation | Planned, M3 P3 |
 | Embedded identity from a host page (signed host token, issuer, audience and key checks, frame allowlist) | Planned, M4 |
@@ -90,6 +94,8 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 - Changes to credential, audit, dispatch, parser, config and review-gate code need a recorded Opus
   review before merge; CI enforces it ([contributing](CONTRIBUTING.md#review-tiers-adr-0007)).
 - Dependencies are license-checked in CI and kept on the newest stable release; Dependabot raises
-  updates, and `pnpm audit --prod` runs at every gate.
+  updates, and `pnpm audit --prod` runs at every gate. A few reviewed audit ignores remain
+  (`auditConfig` in `pnpm-workspace.yaml`): five advisories in build tooling under `apps/mobile`
+  (Expo and Metro: glob, minimatch, braces, zod 3 and deepmerge). The API and web do not use them.
 - Most code is written by AI agents under one developer's direction. An independent human security
   review is required before any handoff (spec 14).

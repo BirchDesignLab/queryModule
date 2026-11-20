@@ -1,6 +1,6 @@
 # Overview: what exists today
 
-Last refreshed 10-19-26, at the M2 P2 gate. This page lists only what is built and merged on `main`.
+Last refreshed 11-20-26, during M2 P3 hardening. This page lists only what is built and merged on `main`.
 Planned work is on the [roadmap](roadmap.md).
 
 > This runs on mock data only and is not connected to real state or national systems. It is still
@@ -37,7 +37,8 @@ in 1901, synthetic names). There is no adapter for a real system.
 | M2 P0 Contracts | Done; full contract gate 10-16-26 | none (no release note for a contracts phase) |
 | M2 P0.5 Dispatch | Done, promoted 10-07-26 | [m2-p0-5.md](releases/m2-p0-5.md) |
 | M2 P1 Feed | Done, promoted 10-15-26 | [m2-p1.md](releases/m2-p1.md) |
-| M2 P2 Audit | Gate run 10-19-26; promote is the developer's call | [m2-p2.md](releases/m2-p2.md) |
+| M2 P2 Audit | Done, promoted 10-19-26 | [m2-p2.md](releases/m2-p2.md) |
+| M2 P3 Hardening | In progress; exit gate not yet run | none yet |
 
 ### M0 Skeleton
 
@@ -107,19 +108,42 @@ in 1901, synthetic names). There is no adapter for a real system.
   <img alt="The admin audit log with filters and a table of request events for two demo users" src="assets/shots/audit-day.png">
 </picture>
 
+### M2 P3 Hardening (in progress)
+
+- `db:reset` resets the demo database (#830, ADR-0015; follow-ups in #833, ADR-0016).
+- `config:import` brings an image's site file in as a new draft or version, and the client config
+  carries `versionId` (#826).
+- A label-only publish now reaches open screens without a reload (#834).
+- Foreign-Origin requests are refused with 403, change-password is rate limited, and the M2 security
+  map is written (#819).
+- `CORS_ORIGINS` is checked at boot (#823).
+- Sweeper, drain and admin-route fixes (#818).
+- Browser tests for going offline and for typing while a result arrives, plus flake fixes (#820,
+  #824).
+- Mockup v6 gaps closed: audit band, rail icons, source lines, dialogs, terminal pane and the
+  purged-result meta line (#839, #841).
+- CI shards the image job's Playwright run into three e2e jobs (#837).
+- An NVDA with Chrome test script for the M2 exit (#843).
+- Dependency fixes: Node 24.22.1 (#847), node-forge 1.4.3 (#852), hono 4.13.19 and
+  @hono/node-server 2.1.9 (#858).
+
+Still to come in P3: the NVDA pass, the host smoke and backup restore test, the M2 release note and
+the m2 promote.
+
 ## The live demo
 
-The latest promoted build runs at https://querymodule.birchdesignlab.com with demo accounts. The
+The latest promoted build, M2 P2 (10-19-26), runs at https://querymodule.birchdesignlab.com with demo
+accounts. The M2 P3 work above is on `main` but not yet promoted. The
 accounts, the demo stories and the runbook are in the [demo guide](demo.md); the
 [M1 runbook](demo/m1-v1.md) is kept as the M1 record. The design brief for M2 P1 is in
 [docs/briefs](briefs/).
 
-## Quality and size, as of 10-19-26
+## Quality and size, as of 11-20-26
 
-- `pnpm verify` on Windows on 10-19-26, on this page's pull request: green, with 406 test
-  files and 5662 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
-  156 of 156 workflow harness scenarios.
-- `pnpm audit --prod`: no new advisory (two high advisories, already reviewed, are ignored in
-  `pnpm-workspace.yaml`).
+- `pnpm verify` on Windows on 11-20-26 (run on #858 and again for #859): green, with 418 test
+  files (415 passed, 3 skipped on Windows) and 5,884 tests (5,879 passed, 5 skipped), and 156 of 156
+  workflow harness scenarios. CI on Linux runs the process tests Windows skips.
+- `pnpm audit --prod`: no new advisory; 5 reviewed advisories in Expo and React Native build tooling
+  under `apps/mobile` (glob, minimatch, braces, zod, deepmerge) are ignored in `pnpm-workspace.yaml`.
 - Every end-to-end scenario runs axe with zero serious or critical findings.
-- 318 pull requests merged; 409 issues closed and 42 open.
+- 349 pull requests merged; 453 issues closed and 41 open.

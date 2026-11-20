@@ -23,6 +23,9 @@ corepack enable
 pnpm install --frozen-lockfile
 ```
 
+On Windows with nvm-windows (nvm4w), each Node version has its own global folder: after switching
+Node (for example to 24.22.1), run `corepack enable` again, or `pnpm` is not found.
+
 pnpm 12 notes:
 
 - `engineStrict: true` and `allowBuilds` live in `pnpm-workspace.yaml`, because pnpm 12 does not

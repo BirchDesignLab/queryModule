@@ -288,7 +288,7 @@ const ROUTE_DEFS = [
     method: "post",
     path: `${API_BASE_PATH}/admin/config/publish`,
     summary:
-      "Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it",
+      "Publish the draft and activate it; refused on any validation error. The optional change note is stored with the version and shown in its history with the publisher's name",
     access: "configEditor",
     since: "m1",
     status: "live",

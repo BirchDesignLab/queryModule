@@ -337,6 +337,14 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     ).toBe(false);
   });
 
+  it("a live route's summary promises no later phase; the publish note is stored (D-M2P0-4)", () => {
+    // Summaries feed openapi.json. A live route that says "until M<n>" describes a past plan.
+    expect(
+      ROUTES.filter((r) => r.status === "live" && /until M\d/.test(r.summary)).map((r) => r.id),
+    ).toEqual([]);
+    expect(findRoute("publishAdminConfig").summary).toMatch(/note is stored/);
+  });
+
   it("locale param accepts en and en-US only shapes", () => {
     expect(LocaleParamsSchema.safeParse({ locale: "en" }).success).toBe(true);
     expect(LocaleParamsSchema.safeParse({ locale: "en-US" }).success).toBe(true);

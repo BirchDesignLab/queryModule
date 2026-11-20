@@ -64,11 +64,22 @@ bash ../scripts/ops/smoke.sh https://querymodule.birchdesignlab.com
 
 `CORS_ORIGINS` in `.env` lists the browser origins the API accepts, comma-separated, each an origin like `https://host` (no path, no trailing slash); empty means `PUBLIC_ORIGIN` only. A REST request carrying any other `Origin` gets 403 (D-M2P3-1), and a malformed entry stops the app at boot with a `CORS_ORIGINS` error that does not echo the value.
 
+The other `deploy/.env.example` variables (`packages/api/src/env.ts`):
+
+| Variable | Meaning |
+|---|---|
+| `ALLOW_MOCK_SOURCES` | `true` only on the demo host, CI and dev (spec 5.4); the app refuses mock sources otherwise |
+| `IDENTITY_MODES` | Comma-separated, `standalone` and/or `embedded`; default `standalone`; any other value stops the app at boot |
+| `MIN_CLIENT_VERSION` | Reported as `minClientVersion` by `/api/v1/meta`; empty means none |
+| `FRAME_ANCESTORS` | Parsed but not applied yet: the CSP sends `frame-ancestors 'none'` until embedded mode (M4) uses this list |
+| `WS_UPGRADE_LIMIT`, `WS_UPGRADE_WINDOW_MS` | WebSocket upgrades per client IP per window; empty keeps the defaults, 60 and 60000 ms (D-A9) |
+| `ADAPTER_DIR` | Plugin adapter directory (`/adapters`); unused for now, only mock adapters are built in (D-A11) |
+
 Install the pull timer once (systemd user units keep running without a login session):
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp deploy/systemd/deploy-pull.{service,timer} ~/.config/systemd/user/
+cp systemd/deploy-pull.{service,timer} ~/.config/systemd/user/
 loginctl enable-linger "$(whoami)"
 systemctl --user daemon-reload
 systemctl --user enable --now deploy-pull.timer
@@ -97,11 +108,29 @@ A wrong guess and the 429 block write no audit row. The limiter logs the user id
 
 Backups hold superseded and deleted credential ciphertext for up to 30 days, recoverable only with the `age` private key, `DB_ENCRYPTION_KEY` and `CREDENTIAL_KEY` together, and crypto-shredded payload keys for the same window, recoverable only with the `age` private key, `DB_ENCRYPTION_KEY` and `DATA_KEY` together.
 
-`scripts/ops/restore-test.sh` restores the newest backup into a throwaway container and compares audit row counts with the backup manifest. It runs at every milestone exit; the result goes into `docs/releases/<milestone>.md`.
+Install the nightly backup units once, as for the pull timer (`~/.config/systemd/user/`, then `daemon-reload` and `systemctl --user enable --now querymodule-backup.timer`):
+
+```bash
+cd ~/git/queryModule/deploy
+cp systemd/querymodule-backup.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now querymodule-backup.timer
+systemctl --user list-timers querymodule-backup.timer
+```
+
+The timer fires daily at 03:30 with up to 10 minutes of random delay and is `Persistent` (a run missed while the laptop was off happens at the next start). The service sets `QM_AGE_RECIPIENT_FILE=/opt/querymodule/backup/age-recipient.txt` (the public recipient key; the private half stays offline) and `QM_RCLONE_REMOTE=r2:querymodule-backups`; edit the unit if either differs on the host.
+
+`scripts/ops/restore-test.sh` restores the newest backup into a throwaway container and compares audit row counts with the backup manifest. It runs at every milestone exit; the result goes into `docs/releases/<milestone>.md`. Usage:
+
+```bash
+AGE_IDENTITY=/media/offline/age-key.txt bash scripts/ops/restore-test.sh [image]
+```
+
+`AGE_IDENTITY` (the offline `age` private key) is required. Optional: `QM_RCLONE_REMOTE` (default `r2:querymodule-backups`), `QM_SECRETS_DIR` (default `/opt/querymodule/secrets`) and the image argument (default `ghcr.io/birchdesignlab/querymodule:release`).
 
 ## Reset and reseed the demo database
 
-`db:reset` (`scripts/ops/db-reset.ts`, [ADR-0016](decisions/0016-demo-database-reset-guards.md), #821) replaces the whole demo database: it backs it up, deletes it, migrates a fresh one (which recreates the audit triggers), runs the seed and then `add-demo-users`. The old database's audit rows go with the file and stay in the backup. The developer runs it on the deploy host; no session ever runs it against the host.
+The db-reset script (`scripts/ops/db-reset.ts`, run in the image as `node scripts/ops/db-reset.js --confirm <site>`, as the commands below show; [ADR-0016](decisions/0016-demo-database-reset-guards.md) and ADR-0015 call it `db:reset`, but no package script has that name; #821) replaces the whole demo database: it backs it up, deletes it, migrates a fresh one (which recreates the audit triggers), runs the seed and then `add-demo-users`. The old database's audit rows go with the file and stay in the backup. The developer runs it on the deploy host; no session ever runs it against the host.
 
 It refuses, with no backup taken and nothing deleted, unless all of these hold: `ALLOW_MOCK_SOURCES=true` and every source of the loaded site is mock; `--confirm` names the loaded site's id; the `app` service does not answer `http://app:<PORT>/api/v1/health` (a refused connection or an unknown host means stopped; any other probe failure, a temporary DNS failure included, refuses); the database is not busy when it checks; and no backup directory for the same second exists (wait a second and rerun). A site with any real source can never pass. If the backup fails, nothing is deleted.
 
@@ -135,3 +164,6 @@ docker compose start app
 - Demo accounts added after the first seed (#781): `docker compose run --rm app node scripts/ops/add-demo-users.js` creates only the demo accounts the database lacks (derived passwords, printed once to stdout; existing accounts unchanged; `@example.test` only; each creation and role grant audited). Steps in `docs/demo.md`, "Add missing demo accounts".
 - Sign-ins: `docker compose run --rm app node scripts/ops/login-stats.js [--since YYYY-MM-DD]` prints, per account, the sign-in count, distinct client IPs and last sign-in (UTC) from the audit's `loginSucceeded` rows; IP values are never printed. Read only.
 - Acknowledgment receipts (NFR-004, D-M2P2-4): the client sends `ackReceipt` over the socket and the server logs one `metric ackReceipt` line per request (correlation id and `e2eMs`, the server-clock time from the acknowledgment to the receipt; a metric, not audit). Summarize on the host with `docker compose logs app --no-log-prefix | docker compose run --rm -T app node scripts/ops/ack-stats.js`; it prints `count`, `p50`, `p95`, `max` (ms) and `malformed` as one JSON line. A file argument works too. Counts reset when the process restarts, so a repeat receipt after a restart is counted again. Read only.
+- Audit counts: `docker compose run --rm app node scripts/ops/audit-stats.js [--up-to <id>]` prints `{"auditCount":n,"auditMaxId":m}`, the same figures a backup manifest holds. Read only.
+- Audit triggers: `docker compose run --rm app node scripts/ops/check-triggers.js` exits 0 only when every `audit_event`, query-table and `site_config_version` trigger exists unaltered, as at startup (CI boot smoke, spec 9.3 step 11).
+- Stopped-app DNS: `bash scripts/ops/probe-stopped-app-dns.sh [image]` shows, in a throwaway compose project on local Docker, what the db-reset health probe gets for `http://app:<port>` when the app service is up, stopped or removed (#829). It touches nothing else.

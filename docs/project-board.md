@@ -35,7 +35,7 @@ Every level above is matched by issue number, never by title (`scripts/ops/board
 
 ## Labels
 
-Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `sensitive`, `api-breaking` (master plan 5.2), plus `epic`, `follow-up`, `decision`, and GitHub's `bug`, `documentation`, `enhancement`, `question`, `accessibility`.
+Track (`platform`, `web`, `core`, `mobile`), phase (`p0`, `p0-5`, `p1` to `p3`), `contract`, `sensitive`, `api-breaking` (master plan 5.2), plus `epic`, `follow-up`, `decision`, and GitHub's `bug`, `documentation`, `enhancement`, `question`, `accessibility`, `design`, and Dependabot's `dependencies`, `javascript`, `docker`. `scripts/ops/gh-setup-labels.sh` creates the track, phase, `sensitive`, `contract` and `api-breaking` labels (and the milestones); `gh-setup-project.mjs` creates `epic`, `follow-up` and `decision`.
 
 ## Flow
 
@@ -49,7 +49,7 @@ Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `
 
 `.github/workflows/project-sync.yml` keeps Status, Start and Finish in step. Its board job reconciles every item of this repository from current truth on every run, whatever the event (issue state, and this repository's open PRs that close it). GitHub keeps only one pending run per concurrency group and drops the rest in a burst, so any run that survives heals the whole board. PRs from forks never count.
 
-Triggering events: a PR opened, reopened, edited, marked ready, drafted or closed; an issue closed or reopened; a manual run (`workflow_dispatch`). There is no push trigger: branch detection was dropped (developer ruling, checker 09-27-26, issue #193) since waves push only after wave-review, so a wave-branch push fires at the end anyway and added no signal a closing PR did not already give; this also means the job needs no wave-branch naming convention, so it works the same for every track's wave branches (`feat/p0-wave-<k>`, `feat/a-p1-wave-<k>`, and so on), not only P0's. Every run reconciles all items of this repository:
+Triggering events: a PR opened, reopened, edited, marked ready, drafted or closed (a PR `synchronize` also fires the workflow but runs only the `sensitive-label` job; the board job skips it); an issue closed or reopened; a manual run (`workflow_dispatch`). There is no push trigger: branch detection was dropped (developer ruling, checker 09-27-26, issue #193) since waves push only after wave-review, so a wave-branch push fires at the end anyway and added no signal a closing PR did not already give; this also means the job needs no wave-branch naming convention, so it works the same for every track's wave branches (`feat/p0-wave-<k>`, `feat/a-p1-wave-<k>`, and so on), not only P0's. Every run reconciles all items of this repository:
 
 | Item | Status from truth |
 |---|---|
@@ -70,7 +70,11 @@ The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Prio
 
 ## Board data
 
-The issue content the setup script writes to GitHub (`PHASES`, `CONTRACTS_M0P0`, `MILESTONE_PARENT_NUMBERS`, `WAVES`, `FOLLOW_UPS`: titles, bodies, labels, milestone, parent, track, phase, number and state) lives in `docs/board/board-data.json`, outside `[gate]` (ADR-0007 amendment, issue #92). Editing it, for example to record a milestone parent's issue number or add a follow-up, is an ordinary change with no sensitive-review artifact. `scripts/ops/board-data-schema.mjs` validates the file at every run, before the first gh call or GitHub read, fail closed with a JSON pointer per error; `scripts/ops/board-data.test.ts` checks the shipped file and one failing case per rule. The script itself, `scripts/ops/gh-setup-project.mjs` (and its structural config in `scripts/ops/board-config.mjs`: which repo and project, labels, milestones, fields), stays `[gate]`: a data file edit can add or reword an issue, never delete a label, add a field, or change which repo or project is written.
+The issue content the setup script writes to GitHub (top-level keys `phases`, `contractsM0P0`, `milestoneParentNumbers`, `waves`, `followUps`, which the script reads into constants `PHASES`, `CONTRACTS_M0P0`, `MILESTONE_PARENT_NUMBERS`, `WAVES`, `FOLLOW_UPS`; each phase also carries a `gate` field: titles, bodies, labels, milestone, parent, track, phase, number and state) lives in `docs/board/board-data.json`, outside `[gate]` (ADR-0007 amendment, issue #92). Editing it, for example to record a milestone parent's issue number or add a follow-up, is an ordinary change with no sensitive-review artifact. `scripts/ops/board-data-schema.mjs` validates the file at every run, before the first gh call or GitHub read, fail closed with a JSON pointer per error; `scripts/ops/board-data.test.ts` checks the shipped file and one failing case per rule. The script itself, `scripts/ops/gh-setup-project.mjs` (and its structural config in `scripts/ops/board-config.mjs`: which repo and project, labels, milestones, fields), stays `[gate]`: a data file edit can add or reword an issue, never delete a label, add a field, or change which repo or project is written.
+
+`scripts/board/` holds one-off, dated catch-up and close scripts (for example `m1-close-2026-10-04.mjs`) with their follow-up data, kept as a record, plus the reusable `sync-followups.mjs`: run it before a board `--apply` to refresh stored follow-up titles and bodies from GitHub (so ticked boxes are not reverted) and upsert entries from a JSON file; it reads GitHub and writes only `docs/board/board-data.json`.
+
+Milestones M0 and M1 are closed; M2 to M4 are open.
 
 ## Manual steps
 

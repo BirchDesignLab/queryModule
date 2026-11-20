@@ -165,17 +165,17 @@ the code that drives the form also guards the API. More: [architecture](docs/arc
 
 The full model, with each control marked built or planned: [SECURITY.md](SECURITY.md).
 
-## Where it stands (10-19-26)
+## Where it stands (11-20-26)
 
 | | |
 |---|---|
 | Built | M0 skeleton; M1 forms, terminal and admin console; M2 P0.5 dispatch to the mock sources with live per-source status; M2 P1 result cards, keyword severity and replay; M2 P2 audit log, admin request view, session sweeper and publish notes |
-| Next | M2 P3 hardening |
+| In progress | M2 P3 hardening. Merged so far: demo database reset, `config:import`, label-only publishes reaching open screens, foreign-Origin refusal, offline and live-region browser tests. Left: the NVDA screen-reader pass, the host smoke and restore test, and the M2 exit |
 | Planned | M3 credentials, MFA, multi-source and delegation; M4 mobile layouts, native app and host-page embedding |
 
 What each milestone delivered: [overview](docs/overview.md). What is planned and not built:
-[roadmap](docs/roadmap.md). A live demo runs the latest promoted build with demo accounts
-([demo guide](docs/demo.md)).
+[roadmap](docs/roadmap.md). A live demo runs the latest promoted build (M2 P2, promoted 10-19-26)
+with demo accounts ([demo guide](docs/demo.md)).
 
 ## Quick start
 

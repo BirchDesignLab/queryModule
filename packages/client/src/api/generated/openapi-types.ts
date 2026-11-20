@@ -164,7 +164,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it */
+        /** Publish the draft and activate it; refused on any validation error. The optional change note is stored with the version and shown in its history with the publisher's name */
         post: operations["publishAdminConfig"];
         delete?: never;
         options?: never;

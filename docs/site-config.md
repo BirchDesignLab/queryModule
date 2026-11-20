@@ -1,11 +1,45 @@
 # Site configuration reference
 
 How a site changes what the Query Module does, without a code change or a rebuild (BR-001, BR-005,
-NFR-001). This page covers M1, the M2 P0.5 dispatch and mock adapter and the M2 P1 result cards, and was checked against the code on 10-14-26. Where a thing does not exist yet, the page says which phase brings it and does not
+NFR-001). This page covers M1 and M2 P0.5 through M2 P3 (dispatch and the mock adapter, result cards, the admin audit log), and was checked against the code on 11-20-26. Where a thing does not exist yet, the page says which phase brings it and does not
 describe it.
 
 Mock data only. The prototype uses a mock data source with canned responses and never connects to
 real state or national systems. Every value below is a placeholder such as `ABC123` or `ZZ-0001`.
+
+## At a glance
+
+One validated JSON document per site drives every screen. Each group of keys below lands in a
+different part of the app; the admin builder edits all of it and publishes a new version that
+reaches open screens at their next config refresh.
+
+```mermaid
+flowchart LR
+    doc[["site config<br/>one JSON document"]]
+    doc --> form["queryTypes · picklists · defaults<br/>quickAccess"]
+    doc --> term["commands · terminal"]
+    doc --> src["sources<br/>(mock adapter today)"]
+    doc --> res["responseMappings · keywords<br/>keywordSeverityStyles"]
+    doc --> look["theme · personas · shortcuts · locales"]
+    doc --> srv["auth · retention · delegation<br/>(server only)"]
+    form --> F(["The query form<br/>fields, rules, sources"])
+    term --> T(["The command terminal<br/>VEH.ZZ-0001..26"])
+    src --> D(["Dispatch<br/>per-source deadlines"])
+    res --> C(["Result cards<br/>keyword marks, severity"])
+    look --> L(["Layout, themes,<br/>keyboard"])
+    srv --> S(["Session limits,<br/>data retention"])
+```
+
+A small change, end to end: this keyword entry
+
+```json
+{ "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] }
+```
+
+marks `STOLEN` in every answer, raises the card and the request to critical, and leaves
+"NOT STOLEN" alone. The builder shows the effect live, in the same renderer dispatchers see:
+
+<img alt="The admin builder's Keywords and severity editor: a sample line with STOLEN, WANTED and MISSING marked critical, EXPIRED as a warning and NO RECORD as info, the STOLEN keyword with its two exceptions, and a card preview for plate ZZ-0001 showing STOLEN marked critical" src="assets/shots/builder-keywords.png">
 
 ## Where config comes from
 
@@ -22,8 +56,12 @@ One site config document describes one site. It reaches the server in two steps 
    validates the image's site file as boot does, keeps the published label overlay, and publishes
    it as the next version through the builder's publish path (`configPublished` by a named admin,
    note "Imported from the image"); `--dry-run` prints the changes first. It never runs at boot.
-   The running app serves the new version after a restart. Steps: [deploy.md](deploy.md), "Apply
-   the image's site config to a seeded deploy".
+   `--admin <email>` names the publishing admin and is required unless `--dry-run`;
+   `--replace-draft` replaces a shared builder draft, which the import otherwise refuses to
+   overwrite; `--file <path>` imports another site file in the image. On the host it runs inside
+   the app container (`docker compose run --rm app node scripts/ops/config-import.js ...`). The
+   running app serves the new version after a restart. Steps: [deploy.md](deploy.md), "Apply the
+   image's site config to a seeded deploy".
 
 Next to the site file:
 
@@ -50,7 +88,7 @@ A site config has these top-level keys. Unknown keys are errors.
 | `locales` | The site's locales. The first is the default. Default `["en"]`. |
 | `features` | Feature flags. See "Features". |
 | `personas` | Layout choices: each has a `key`, a `labelKey` and a `layout` (`dispatch`, `mobileUnit` or `mobile`). |
-| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired`, embedded role claims. Server only. `absoluteMinutes` may not exceed 10080 (7 days, the session ceiling; Better Auth's own fixed expiry sits one day past it, so the sweeper always ends a session first; `config.sessionCeilingExceeded`) and `idleMinutes` may not exceed `absoluteMinutes` (`config.sessionIdleOverAbsolute`). |
+| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired` (`true`, `false` or `{ "roles": [...] }`), embedded role claims. Server only. `absoluteMinutes` may not exceed 10080 (7 days, the session ceiling; Better Auth's own fixed expiry sits one day past it, so the sweeper always ends a session first; `config.sessionCeilingExceeded`) and `idleMinutes` may not exceed `absoluteMinutes` (`config.sessionIdleOverAbsolute`). |
 | `delegation` | Delegated credentials: `maxDurationMinutes` and `purposes`. Used when the `delegation` feature is built (M3). |
 | `retention` | `payloadDays` and `valuesDays`; `null` keeps data. The prototype ships `null`. Server only. |
 | `terminal` | `delimiter`, one printable non-alphanumeric ASCII character, default `.`. |
@@ -69,7 +107,8 @@ A site config has these top-level keys. Unknown keys are errors.
 Server-only keys (`auth`, `retention`, `extends`, and each source's `kind`, `maxConcurrent` and
 `server`) are never sent to the browser: `GET /api/v1/config` returns a client view without them.
 The admin builder edits the client view. Server-only sections ride along untouched when a draft is
-saved, so the builder does not change them in M1.
+saved, so the builder does not change them. `$schema` is also an allowed top-level key (for editor
+autocomplete).
 
 ### Features
 
@@ -198,7 +237,7 @@ description.
 
 **Nested queries.** `alsoRun` lists other query types to run with this one, each with a `fieldMap`
 from the nested type's fields to this type's fields and an optional `when`. One level only, at most
-4 entries. The shipped `PER` type also runs `WNT`.
+4 entries. The shipped `PER` and `DL` types also run `WNT`.
 
 ## Rules
 
@@ -333,8 +372,8 @@ Keywords drive two things (M2 P1, spec 4.5):
   announcement. The highest severity wins (`critical`, then `warning`, then `info`).
 
 The shipped default site's keywords are `STOLEN`, `WANTED` and `MISSING` (critical; `NOT STOLEN`,
-`RECOVERED STOLEN` and `NOT WANTED` do not count), `EXPIRED` (warning), and `NO RECORD` and
-`RECOVERED` (info). Validation rejects a style whose color pair is below 4.5:1 in any theme mode,
+`RECOVERED STOLEN` and `NOT WANTED` do not count), `EXPIRED` (warning), and `NO RECORD`,
+`RECOVERED` and `NO WANTS OR WARRANTS` (info). Validation rejects a style whose color pair is below 4.5:1 in any theme mode,
 and the shipped styles are at least 7:1 in every mode (the info style and the red-shift critical
 color were raised for that in M2 P1). `audibleCue` stays `false` in M2 P1.
 
@@ -442,7 +481,8 @@ the device guess, so the officer demo account opens the mobile-unit layout on a 
 
 ## Shortcuts
 
-`shortcuts` replaces defaults per action key. A binding is `{ keys, context }`. `keys` is one or
+`shortcuts` replaces defaults per action key. A binding is `{ keys, context }`, or an array of
+bindings when an action has more than one. `keys` is one or
 more strokes separated by spaces (a chord), each stroke written
 `[Ctrl+][Alt+][Shift+]<KeyboardEvent.code>`, such as `Ctrl+Backquote` or `KeyG KeyQ`. `context` is
 `global`, `panel`, `results` or `terminal`.
@@ -463,8 +503,8 @@ more strokes separated by spaces (a chord), each stroke written
 Validation rejects two bindings with the same keys in one context, a chord whose first stroke is
 another binding in the same context, a `global` binding that collides with any other, and a
 single-key binding that types the terminal delimiter. That last rule is why `example-ok`, whose
-delimiter is `/`, rebinds `focusTerminal` to `Ctrl+Slash`. The `results` shortcuts have nothing to
-act on until results exist (M2).
+delimiter is `/`, rebinds `focusTerminal` to `Ctrl+Slash`. Only `deleteFromView` has nothing to act
+on while `resultHide` is off (M3); the other `results` shortcuts act on the request list.
 
 ## Theme
 
@@ -503,6 +543,9 @@ text } }`, laid over the bundled file. The admin builder edits it.
 
 ## Mock files
 
+
+<img alt="Try a match in the admin builder: plate ZZ-0001 typed against the State system's Vehicle mock responses; the pane names the scenario that answers and shows the result card dispatchers would see" src="assets/shots/builder-try-a-match.png">
+
 A site with a `mock` source needs `packages/config/mock/<siteId>.json` while
 `ALLOW_MOCK_SOURCES=true`. The file is:
 
@@ -530,6 +573,8 @@ A site with a `mock` source needs `packages/config/mock/<siteId>.json` while
 
 - `latencyMs` is a `[min, max]` range in milliseconds.
 - Each query type a mock source serves needs a `responses` entry (`config:validate` checks this).
+  An entry may carry `types`, a map of type-field values it applies to; the most specific matching
+  entry wins (see the adapter steps below).
 - A scenario names the field values it matches in `when`, and either a `respond` payload or a
   `behavior`: `timeout`, `error` or `credentialsRejected`, never both.
 
@@ -538,14 +583,16 @@ Scenarios shipped in the default site (the mock files are the full list):
 | Query | Trigger | Answer |
 |---|---|---|
 | `VEH` plate `ZZ-0001` | state and national source | `STOLEN` |
+| `VEH` plate `ZZ-0010` | state and national source | `REGISTERED` |
 | `VEH` plate `ABC123` | state source | `NO RECORD` |
 | `VEH` plate `FAIL1` | state source | an error |
 | `VEH` plate `TIMEOUT` | national source | a timeout |
-| `PRO` serial `ZZSTOLEN1` | both sources (default site only) | `STOLEN` |
+| `PRO` serial `ZZSTOLEN1` | both sources | `STOLEN` |
 | `WNT` last `WANTED` | national source | `WANTED` |
-| `WNT` last `MISSING` | national source (default site only) | `MISSING PERSON` |
+| `WNT` last `MISSING` | national source | `MISSING PERSON` |
+| `PER` first `SAMPLE`, last `EXAMPLESON` | state source | `RECORD FOUND` |
 | `DL` license number `ZZDLTEST` | state source | `VALID` (one synthetic record) |
-| anything else | any mock source | the type's `default`, usually `NO RECORD` |
+| anything else | any mock source | the type's `default`: `NO RECORD`, or `NO WANTS OR WARRANTS` for `WNT` |
 
 A submit now dispatches to the mock sources (ADR-0012). The mock adapter
 (`packages/api/src/adapters/mock.ts`) serves the mock stored with the pinned config snapshot
@@ -622,6 +669,7 @@ pnpm config:validate                     # every file in packages/config/sites a
 pnpm config:validate <file> [<file> ...] # named files
 pnpm config:validate --resolved          # also print each file's merged (extends applied) config
 pnpm config:validate --diff <tag>        # what changed since a git tag or sha, one line per change
+pnpm config:validate -- <file>           # `--` ends options, for a file name that starts with --
 pnpm config:migrate <file>               # bring an older config up to the current schemaVersion
 ```
 
@@ -630,7 +678,9 @@ strict parse, the referential checks (duplicate and unresolved ids, field and pi
 literals that do not fit their field, command and shortcut checks, contrast per theme mode, locale
 coverage) and the mock coverage. Each problem prints on one line as
 `ERROR <file> <json-pointer> <key> <params>`; a warning prints as `WARN`. The command exits 1 when
-any file has an error and 2 on bad usage.
+any file has an error and 2 on bad usage (`--resolved` cannot combine with `--diff`: exit 2). The
+whole-tree run (no file named) also exits 1 when a mock file differs from what the generator
+would write (see "Fixture policy and the generator").
 For a site with mock sources it also resolves every response mapping path (and table column path)
 against the mock answers, and prints a `WARN` `config.mappingPathUnresolved` for an element no mock
 answer resolves (a path may resolve in only some answers, since a no-record answer lacks fields).
@@ -656,10 +706,15 @@ not validate fails CI.
 
 ## The admin builder and the config store
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/builder-night.png">
+  <img alt="The admin site configuration builder: the tree of query types and result cards, the Vehicle card editor with Which card wins, and the live card preview" src="assets/shots/builder-day.png">
+</picture>
+
 The admin console at `/admin` edits and publishes the live config (ADR-0011). It is lazy-loaded and
 shown only to the `admin` and `implementer` roles, behind the `adminConfig` feature. The `admin`
-role also gets Users and roles (the `adminUsers` feature). The audit log entry is listed but not
-built (the `adminAudit` feature, M2).
+role also gets Users and roles (the `adminUsers` feature). Admins also get the Audit log (Oversight group, the
+`adminAudit` feature) and its request view.
 
 **Roles.** `implementer` edits and publishes config only: no users, no queries (a submit answers
 `403 forbidden`). `admin` does all of that and also manages users, roles and sessions.
@@ -748,13 +803,13 @@ values are never saved.
 **Review and publish** lists the changes in plain sentences, one per change, in two lists named
 "Result cards" and "Keywords and severity" (card ids, row labels and paths, keyword text and severity;
 never payload content or typed values). A publish reaches open dispatcher tabs at the next config
-refresh, and cards already on screen are redrawn with the new settings; a label added in the builder
-reaches a tab already open only after it reloads, because a refresh does not refetch the locale
-bundle.
+refresh, and cards already on screen are redrawn with the new settings; a label-only publish changes
+`versionId` (not `configHash`), and open tabs refetch the locale bundle at the next config refresh
+and show the new text without a reload (#834). `GET /api/v1/config` returns `versionId` next to the
+client view.
 
 ## Not yet built
 
 | Topic | Where it lands |
 |---|---|
 | Credentials, delegation, delete from view (`credentials`, `delegation`, `resultHide`) | M3 |
-| Audit viewer (`adminAudit`) | M2 P2 |

@@ -1,6 +1,6 @@
 # Roadmap: what is planned
 
-Last refreshed 10-19-26. Everything on this page is **planned and not built**, unless a line says
+Last refreshed 11-20-26. Everything on this page is **planned and not built**, unless a line says
 otherwise. What exists today is in the [overview](overview.md).
 
 The plan follows the [design spec v2](superpowers/specs/2026-09-25-query-module-2-design-v2.md),
@@ -29,9 +29,10 @@ every issue ([board guide](project-board.md)).
 
 ## M2 Results and audit: remaining phases
 
-- **P3 hardening.** A security test matrix for the M2 routes, a backup restore test, and browser
-  tests at 1024x768 for a critical result shown only in detail, typing while a result arrives, and
-  going offline. M2 exits with a screen-reader pass (NVDA with Chrome).
+- **P3 hardening, what is left.** The NVDA with Chrome pass (script written in #843; results and
+  docs in #811 and #812), the live smoke and backup restore test on the host (#801), and the M2
+  release note, docs and showcase refresh, and the `m2` promote (#813). M2 exits with the
+  screen-reader pass.
 
 ## M3 Workflow and compliance
 
@@ -41,7 +42,8 @@ every issue ([board guide](project-board.md)).
   log line for credential values.
 - **Multi-source, nested queries, hide (P2).** A query that runs follow-on queries from an answer,
   grouped under one correlation ID, with per-source and global caps. Delete from view: the user hides
-  results from their own view, the rows stay in the database, and the hide is audited. Purge by
+  results from their own view, the rows stay in the database, and the hide is audited. Replay must exclude hidden results; that check moves to the M3 P2 gate
+  ([ADR-0014](decisions/0014-m2-exit-replay-hidden.md)). Purge by
   crypto-shredding the per-request key. A site-narrowed property type list, where
   required fields change with the selected type (story B7).
 - **Delegation (P3).** A training officer approves a trainee to query on the officer's behalf, with a
@@ -72,6 +74,6 @@ OCR scans, a voice spike, response aggregation, an offline submit queue, and an 
 ## Outside this design
 
 Real source adapters, Shared Platform integration (PLT-001 to PLT-005 stay stubbed behind seam
-interfaces), horizontal scale-out, a credential key rotation procedure, and formal CJIS, GDPR or EU
+interfaces), horizontal scale-out, a credential key rotation procedure (open decision #685), and formal CJIS, GDPR or EU
 Cyber Resilience Act certification (spec 2, non-goals). The design follows those control areas;
 certification is not in scope.
