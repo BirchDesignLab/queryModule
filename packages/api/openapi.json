@@ -599,7 +599,7 @@
     "/api/v1/admin/config/publish": {
       "post": {
         "operationId": "publishAdminConfig",
-        "summary": "Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it",
+        "summary": "Publish the draft and activate it; refused on any validation error. The optional change note is stored with the version and shown in its history with the publisher's name",
         "x-feature": "adminConfig",
         "requestBody": {
           "required": true,
