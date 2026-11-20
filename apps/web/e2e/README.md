@@ -20,7 +20,7 @@ shipped config back, see `admin-draft.ts`).
   `label.fill()` skip the tab order. `tabTo()` in `admin-result-cards.spec.ts` is the model.
 - **Measure, do not eyeball.** Layout specs read bounding boxes and computed styles at the two demo
   sizes (1366x768 and 1024x768) so a clipped or wrapped control fails the run.
-- **Shot specs are not tests.** `visual-shots`, `gap-shots`, `polish-shots` and `brief-shots` skip
+- **Shot specs are not tests.** `visual-shots`, `gap-shots`, `polish-shots`, `brief-shots` and `docs-shots` skip
   unless their `*_SHOTS_DIR` variable is set (see each file's header); they only look.
 - **Builder helpers are shared** from `builder-helpers.ts` (`tree`, `editor`, `preview`,
   `openSiteConfiguration`, `selectRow`, `selectCard`): add to it instead of copying a helper into a

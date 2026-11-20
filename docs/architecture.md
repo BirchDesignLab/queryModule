@@ -24,6 +24,35 @@ a stage (spec 2).
 - `apps/web` is the browser app for the dispatcher, records and mobile-unit users and the admin
   console.
 
+```mermaid
+flowchart TB
+    subgraph browser["Browser"]
+        web["apps/web<br/>Vite + React"]
+        webui["packages/web-ui<br/>React DOM components"]
+        client["packages/client<br/>API client, feed, draft state"]
+        web --> webui --> client
+    end
+    subgraph shared["Shared, no IO"]
+        core["packages/core<br/>contracts, rules, terminal parser,<br/>planner, response mapper"]
+        tokens["packages/tokens<br/>day, night, red-shift"]
+        config["packages/config<br/>sites, locales, mock files"]
+    end
+    subgraph server["One Node 24 process"]
+        api["packages/api<br/>HTTP + WebSocket under /api/v1"]
+        dispatch["dispatcher + mock adapter"]
+        sweeper["session sweeper"]
+        db[("encrypted SQLite<br/>append-only audit")]
+        api --> dispatch --> db
+        api --> db
+        sweeper --> db
+    end
+    client -- "REST + wss" --> api
+    client --> core
+    webui --> tokens
+    api --> core
+    api --> config
+```
+
 ## One query, end to end
 
 ```mermaid
@@ -89,6 +118,7 @@ sequenceDiagram
 | `scripts/demo` | Keyboard-only dry run of the demo runbook, and re-walk extras |
 | `scripts/briefs` | Renders the design brief HTML under `docs/briefs/` to PDF |
 | `scripts/design` | Screenshots the approved mockup frames for comparison |
+| `scripts/docs` | Retakes the README and reader-doc screenshots and the terminal GIF on mock data (`shots.mjs`), and draws the README banner (`banner.mjs`) |
 | `scripts/perf` | Opt-in keystroke-cost measurement |
 | `scripts/pm` | One-off scripts that created each phase's GitHub issues |
 | `scripts/board` | One-off GitHub board chores (milestone closes, follow-up sync) |
