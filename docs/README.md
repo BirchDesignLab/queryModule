@@ -25,6 +25,7 @@ state-system credentials comes in M3.
 | [Demo guide](demo.md) | Demo accounts, demo stories, the demo seed and runbook |
 | [Demo: M1 runbook](demo/) | The M1 demo runbook, kept as the M1 record |
 | [Deploying](deploy.md) | The single-node Docker host, secrets, release and rollback, backups, runbooks |
+| [assets](assets/) | The README banner and the product screenshots and GIF, retaken on mock data by `node scripts/docs/shots.mjs` |
 
 ## Working on the code
 

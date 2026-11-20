@@ -15,6 +15,11 @@ desk, records staff, and officers in a vehicle (the mobile unit). Each builds a 
 plate, a person, a driver's license, a warrant, an article of property) from a form or by typing a
 command, sends it to one or more sources, and reads each source's answer as it arrives.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/results-night.png">
+  <img alt="The dispatcher screen: the vehicle form on the left, and a request for plate ZZ-0001 on the right with State system and National system cards, both STOLEN and critical" src="assets/shots/results-day.png">
+</picture>
+
 The product requirement is the
 [requirements definition](../Requirements%20Definition%20-%20Query%20Module%20Usability%20Enhancements.md);
 the design is the [design spec v2](superpowers/specs/2026-09-25-query-module-2-design-v2.md).
@@ -55,6 +60,11 @@ in 1901, synthetic names). There is no adapter for a real system.
   dispatcher screens without a reload (ADR-0011).
 - A submit is validated, recorded and audited, and answered with a 202 acknowledgment.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/builder-night.png">
+  <img alt="The admin site configuration builder with the Vehicle result card editor and its live preview" src="assets/shots/builder-day.png">
+</picture>
+
 ### M2 P0.5 Dispatch
 
 - Each submit is dispatched in the background to the mock sources, in parallel, each with its own
@@ -72,6 +82,11 @@ in 1901, synthetic names). There is no adapter for a real system.
 - "Edit as new query" loads a past request's values into the form under the current config.
 - A demo scenario pack, a one-time demo seed, and a keyboard-only dry run of the demo runbook.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/warrants-night.png">
+  <img alt="A wanted check for WANTED: the National system card marked critical with its warrants table open" src="assets/shots/warrants-day.png" width="70%">
+</picture>
+
 ### M2 P2 Audit
 
 - An audit log in the admin console: filters, paging, and an NDJSON export. Reading or exporting
@@ -86,6 +101,11 @@ in 1901, synthetic names). There is no adapter for a real system.
 - The terminal can sit beside the results, chosen in the account menu.
 - `config:validate` checks result-card paths against the mock answers and gains `--diff <tag>`;
   bearer sign-in is tested on REST and the WebSocket.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/shots/audit-night.png">
+  <img alt="The admin audit log with filters and a table of request events for two demo users" src="assets/shots/audit-day.png">
+</picture>
 
 ## The live demo
 

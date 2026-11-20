@@ -24,6 +24,10 @@ All data behind these accounts is mock data (spec 5.4 fixture policy). No real p
 
 ## Demo stories
 
+<p align="center">
+  <img alt="Story 1 in the Night theme: slash opens the terminal, VEH.ZZ-0001..26 runs, and both mock sources return STOLEN cards marked critical" src="assets/shots/query-flow.gif" width="88%">
+</p>
+
 Every story below is one command away on the default site, with mock data only (ZZ- plates, ZZ
 serials, 1901 dates, synthetic names). Type the command in the terminal ("Terminal mode", or `/`
 from outside a field), or fill the same values in the form. Each command was run end to end against
